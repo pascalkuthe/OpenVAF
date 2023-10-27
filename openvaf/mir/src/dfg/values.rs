@@ -74,6 +74,7 @@ pub mod consts {
         pub const N_ONE: i32 = -1;
         pub const F_TEN: f64 = 10.0;
         pub const F_THREE: f64 = 3.0;
+        pub const INFINITY: f64 = f64::INFINITY;
     }
 }
 
@@ -283,6 +284,9 @@ impl DfgValues {
         let data = ValueData::new(ty, tag.into());
         self.defs.push_and_get_key(data)
     }
+    pub fn make_invalid_value(&mut self) -> Value {
+        self.make(ValueDataType::Invalid, None)
+    }
 
     /// Allocate an extended value entry.
     pub fn make_param(&mut self, param: Param) -> Value {
@@ -406,6 +410,16 @@ impl DfgValues {
         })
     }
 
+    pub fn make_const(&mut self, val: Const) -> Value {
+        match val {
+            Const::Float(val) => self.fconst(val),
+            Const::Int(val) => self.iconst(val),
+            Const::Str(val) => self.sconst(val),
+            Const::Bool(false) => FALSE,
+            Const::Bool(true) => TRUE,
+        }
+    }
+
     pub fn sconst(&mut self, val: Spur) -> Value {
         *self.str_consts.entry(val).or_insert_with(|| {
             let data = ValueDataType::Sconst { val }.into();
@@ -444,8 +458,14 @@ impl DataFlowGraph {
     }
 
     pub fn strip_alias(&mut self) {
+        self.strip_alias_after(0);
+    }
+
+    pub fn strip_alias_after(&mut self, old_num_vals: usize) {
         let mut stack = Vec::with_capacity(64);
-        for mut val in self.values() {
+        let vals = old_num_vals..self.num_values();
+        for val in vals {
+            let mut val: Value = val.into();
             loop {
                 let def = unsafe { self.values.defs.get_unchecked(val) };
                 if let ValueDataType::Alias(alias) = def.ty {

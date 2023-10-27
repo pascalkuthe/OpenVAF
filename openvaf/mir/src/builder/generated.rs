@@ -74,6 +74,18 @@ pub trait InstBuilder<'f>: InstBuilderBase<'f> {
         let (inst, dfg) = self.build(PhiNode { args, blocks }.into());
         dfg.first_result(inst)
     }
+    #[inline]
+    fn ensure_optbarrier(self, val: Value) -> Value {
+        match self.data_flow_graph().value_def(val) {
+            crate::ValueDef::Result(inst, _)
+                if self.data_flow_graph().insts[inst].opcode() == Opcode::OptBarrier =>
+            {
+                val
+            }
+            crate::ValueDef::Const(_) => val,
+            _ => self.optbarrier(val),
+        }
+    }
     fn inot(self, arg0: Value) -> Value {
         let (inst, dfg) = self.unary(Opcode::Inot, arg0);
         dfg.first_result(inst)

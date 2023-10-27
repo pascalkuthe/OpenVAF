@@ -1,0 +1,34 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "G"
+units = "", desc = "current amplification factor", flags = ParameterFlags(0x0)
+param "Rin"
+units = "Ohm", desc = "input Resistance", flags = ParameterFlags(0x0)
+param "Rout"
+units = "Ohm", desc = "output Resistance", flags = ParameterFlags(0x0)
+
+4 terminals
+node "Inp" units = "V", runits = ""
+residual 184 4294967295 4294967295 4294967295
+node "Inm" units = "V", runits = ""
+residual 192 4294967295 4294967295 4294967295
+node "Outp" units = "V", runits = ""
+residual 200 4294967295 4294967295 4294967295
+node "Outm" units = "V", runits = ""
+residual 208 4294967295 4294967295 4294967295
+node(flow) "flow(br_in)" units = "A", runits = ""
+residual 216 4294967295 4294967295 4294967295
+jacobian (Inp, flow(br_in)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Inm, flow(br_in)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outp, Outp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outp, Outm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outm, Outp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outm, Outm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (Outm, flow(br_in)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(br_in), Inp) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(br_in), Inm) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (flow(br_in), flow(br_in)) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+0 states
+has bound_step false
+instance size 224
+model size 40

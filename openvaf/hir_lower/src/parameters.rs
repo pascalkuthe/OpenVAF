@@ -1,18 +1,18 @@
-use std::f64::{INFINITY, NEG_INFINITY};
+use std::f64::NEG_INFINITY;
 use std::mem::replace;
 
-use ahash::AHashSet;
 use hir::{CompilationDB, ConstraintValue, ParamConstraint, Parameter, Type};
 use lasso::Rodeo;
 use mir::builder::InstBuilder;
-use mir::{Block, FuncRef, Function, Opcode, Value, FALSE, GRAVESTONE};
+use mir::{Block, FuncRef, Function, Opcode, Value, FALSE, GRAVESTONE, INFINITY};
 use mir_build::{FunctionBuilder, FunctionBuilderContext};
 use stdx::packed_option::ReservedValue;
 use syntax::ast::ConstraintKind;
-use typed_indexmap::TiSet;
 
-use crate::body::LoweringCtx;
-use crate::{CallBackKind, HirInterner, ParamInfoKind, ParamKind, PlaceKind};
+use crate::body::BodyLoweringCtx;
+use crate::callbacks::ParamInfoKind;
+use crate::ctx::LoweringCtx;
+use crate::{CallBackKind, HirInterner, ParamKind, PlaceKind};
 
 #[derive(Clone, Copy, Debug)]
 struct CmpOps {
@@ -57,47 +57,34 @@ impl HirInterner {
         let mut default_vals = if build_stores { vec![GRAVESTONE; params.len()] } else { vec![] };
 
         let f_neg_inf = func.dfg.fconst(NEG_INFINITY.into());
-        let f_inf = func.dfg.fconst(INFINITY.into());
+        let f_inf = INFINITY;
         let i_inf = func.dfg.iconst(i32::MAX);
         let i_neg_inf = func.dfg.iconst(i32::MIN);
 
         let mut ctx = FunctionBuilderContext::default();
-        let (mut builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
+        let (builder, term) = FunctionBuilder::edit(func, literals, &mut ctx, false);
+        let mut ctx = LoweringCtx::new(db, builder, true, self);
 
         for (i, param) in params.iter().copied().enumerate() {
-            let mut param_val = self.ensure_param(builder.func, ParamKind::Param(param));
-            let param_given = self.ensure_param(builder.func, ParamKind::ParamGiven { param });
+            let mut param_val = ctx.use_param(ParamKind::Param(param));
+            let param_given = ctx.use_param(ParamKind::ParamGiven { param });
+
+            // create a temporary to hold onto the uses
+            let new_val = ctx.func.make_param(0u32.into());
+            ctx.dfg_mut().replace_uses(param_val, new_val);
 
             let body = param.init(db);
             let ty = param.ty(db);
             let bounds = param.bounds(db);
 
-            // create a temporary to hold onto the uses
-            let new_val = builder.make_param(0u32.into());
-            builder.func.dfg.replace_uses(param_val, new_val);
-
             let ops = CmpOps::from_ty(&ty);
+            let invalid = ctx.dec_callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
 
-            let (then_src, else_src) = builder.make_cond(param_given, |builder, param_given| {
+            let (then_src, else_src) = ctx.make_cond(param_given, |ctx, param_given| {
                 if param_given {
                     if build_stores {
-                        let mut ctx = LoweringCtx {
-                            db,
-                            data: self,
-                            func: builder,
-                            places: &mut TiSet::default(),
-                            body: body.borrow(),
-                            tagged_vars: &AHashSet::default(),
-                            extra_dims: None,
-                            path: "",
-                            contribute_rhs: false,
-                            inside_lim: false,
-                        };
-
-                        let invalid =
-                            ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
-                        let exit = ctx.func.create_block();
-
+                        let exit = ctx.create_block();
+                        let mut ctx = BodyLoweringCtx { ctx, body: body.borrow(), path: "" };
                         ctx.check_param(
                             param_val,
                             &bounds,
@@ -107,7 +94,6 @@ impl HirInterner {
                             invalid,
                             exit,
                         );
-
                         ctx.check_param(
                             param_val,
                             &bounds,
@@ -117,30 +103,14 @@ impl HirInterner {
                             invalid,
                             exit,
                         );
-
-                        ctx.func.switch_to_block(exit);
+                        ctx.ctx.switch_to_block(exit);
                     }
                     param_val
                 } else {
-                    let default_val = self.lower_expr_body(db, body.clone(), 0, builder);
+                    let default_val = ctx.lower_expr_body(body.borrow(), 0);
                     if build_stores {
-                        let mut ctx = LoweringCtx {
-                            db,
-                            data: self,
-                            func: builder,
-                            places: &mut TiSet::default(),
-                            body: body.borrow(),
-                            tagged_vars: &AHashSet::default(),
-                            extra_dims: None,
-                            path: "",
-                            contribute_rhs: false,
-                            inside_lim: false,
-                        };
-
-                        let invalid =
-                            ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
-                        let exit = ctx.func.create_block();
-
+                        let exit = ctx.create_block();
+                        let mut ctx = BodyLoweringCtx { ctx, body: body.borrow(), path: "" };
                         ctx.check_param(
                             default_val,
                             &bounds,
@@ -150,7 +120,6 @@ impl HirInterner {
                             invalid,
                             exit,
                         );
-
                         ctx.check_param(
                             default_val,
                             &bounds,
@@ -160,54 +129,40 @@ impl HirInterner {
                             invalid,
                             exit,
                         );
-
-                        ctx.func.switch_to_block(exit);
-
-                        default_vals[i] = builder.ins().optbarrier(default_val);
+                        ctx.ctx.switch_to_block(exit);
+                        default_vals[i] = ctx.ctx.ins().optbarrier(default_val);
                     }
                     default_val
                 }
             });
 
             // let last_inst = builder.func.layout.last_inst(else_src.0).unwrap();
-            builder.ins().with_result(new_val).phi(&[then_src, else_src]);
+            ctx.ins().with_result(new_val).phi(&[then_src, else_src]);
 
             // we purposfull insert these reversed here (new val into params and old val into
             // outputs). This ensures that the code generated for other parameters uses the
             // correct value. After code generation is complete we swap these two again
-            self.params.insert(ParamKind::Param(param), new_val);
-            self.outputs.insert(PlaceKind::Param(param), param_val.into());
+            ctx.def_param(ParamKind::Param(param), new_val);
+            ctx.def_output(PlaceKind::Param(param), param_val);
             param_val = new_val;
 
             if !build_min_max {
                 continue;
             }
 
-            let mut ctx = LoweringCtx {
-                db,
-                data: self,
-                func: &mut builder,
-                places: &mut TiSet::default(),
-                body: body.borrow(),
-                path: "",
-                tagged_vars: &AHashSet::default(),
-                extra_dims: None,
-                contribute_rhs: false,
-                inside_lim: false,
-            };
-
-            let invalid = ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
+            let invalid = ctx.dec_callback(CallBackKind::ParamInfo(ParamInfoKind::Invalid, param));
 
             let precomputed_vals = if build_min_max {
                 let min_inclusive =
-                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
+                    ctx.dec_callback(CallBackKind::ParamInfo(ParamInfoKind::MinInclusive, param));
                 let max_inclusive =
-                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param));
+                    ctx.dec_callback(CallBackKind::ParamInfo(ParamInfoKind::MaxInclusive, param));
                 let min_exclusive =
-                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param));
+                    ctx.dec_callback(CallBackKind::ParamInfo(ParamInfoKind::MinExclusive, param));
                 let max_exclusive =
-                    ctx.callback(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param));
+                    ctx.dec_callback(CallBackKind::ParamInfo(ParamInfoKind::MaxExclusive, param));
 
+                let mut ctx = BodyLoweringCtx { ctx: &mut ctx, body: body.borrow(), path: "" };
                 let mut lowered_bounds = None;
                 let precomputed_vals = bounds
                     .iter()
@@ -220,8 +175,8 @@ impl HirInterner {
                                 let val = ctx.lower_expr(val);
 
                                 if let Some((min, max)) = lowered_bounds {
-                                    let is_min = ctx.func.ins().binary1(ops.le.unwrap(), val, min);
-                                    let min = ctx.func.make_select(is_min, |builder, is_min| {
+                                    let is_min = ctx.ctx.ins().binary1(ops.le.unwrap(), val, min);
+                                    let min = ctx.ctx.make_select(is_min, |builder, is_min| {
                                         if is_min {
                                             builder.ins().call(min_inclusive, &[]);
                                             val
@@ -230,8 +185,8 @@ impl HirInterner {
                                         }
                                     });
 
-                                    let is_max = ctx.func.ins().binary1(ops.le.unwrap(), max, val);
-                                    let max = ctx.func.make_select(is_max, |builder, is_max| {
+                                    let is_max = ctx.ctx.ins().binary1(ops.le.unwrap(), max, val);
+                                    let max = ctx.ctx.make_select(is_max, |builder, is_max| {
                                         if is_max {
                                             builder.ins().call(max_inclusive, &[]);
                                             val
@@ -243,8 +198,8 @@ impl HirInterner {
                                     lowered_bounds = Some((min, max));
                                 } else if ops.le.is_some() {
                                     lowered_bounds = Some((val, val));
-                                    ctx.func.ins().call(min_inclusive, &[]);
-                                    ctx.func.ins().call(max_inclusive, &[]);
+                                    ctx.ctx.ins().call(min_inclusive, &[]);
+                                    ctx.ctx.ins().call(max_inclusive, &[]);
                                 }
                                 (val, Value::reserved_value())
                             }
@@ -259,8 +214,8 @@ impl HirInterner {
                                         (ops.lt.unwrap(), min_exclusive)
                                     };
 
-                                    let is_min = ctx.func.ins().binary1(op, start, min);
-                                    let min = ctx.func.make_select(is_min, |builder, is_min| {
+                                    let is_min = ctx.ctx.ins().binary1(op, start, min);
+                                    let min = ctx.ctx.make_select(is_min, |builder, is_min| {
                                         if is_min {
                                             builder.ins().call(call, &[]);
                                             start
@@ -275,8 +230,8 @@ impl HirInterner {
                                         (ops.lt.unwrap(), max_exclusive)
                                     };
 
-                                    let is_max = ctx.func.ins().binary1(op, max, end);
-                                    let max = ctx.func.make_select(is_max, |builder, is_max| {
+                                    let is_max = ctx.ctx.ins().binary1(op, max, end);
+                                    let max = ctx.ctx.make_select(is_max, |builder, is_max| {
                                         if is_max {
                                             builder.ins().call(call, &[]);
                                             start
@@ -288,15 +243,15 @@ impl HirInterner {
                                     lowered_bounds = Some((min, max));
                                 } else {
                                     if range.start_inclusive {
-                                        ctx.func.ins().call(min_inclusive, &[]);
+                                        ctx.ctx.ins().call(min_inclusive, &[]);
                                     } else {
-                                        ctx.func.ins().call(min_exclusive, &[]);
+                                        ctx.ctx.ins().call(min_exclusive, &[]);
                                     }
 
                                     if range.end_inclusive {
-                                        ctx.func.ins().call(max_inclusive, &[]);
+                                        ctx.ctx.ins().call(max_inclusive, &[]);
                                     } else {
-                                        ctx.func.ins().call(max_exclusive, &[]);
+                                        ctx.ctx.ins().call(max_exclusive, &[]);
                                     }
 
                                     lowered_bounds = Some((start, end));
@@ -316,18 +271,16 @@ impl HirInterner {
                     _ => unreachable!(),
                 });
 
-                ctx.data.outputs.insert(PlaceKind::ParamMin(param), min.into());
-
-                ctx.data.outputs.insert(PlaceKind::ParamMax(param), max.into());
+                ctx.ctx.intern.outputs.insert(PlaceKind::ParamMin(param), min.into());
+                ctx.ctx.intern.outputs.insert(PlaceKind::ParamMax(param), max.into());
                 precomputed_vals
             } else {
                 vec![]
             };
 
             // first from bounds (here we also get min/max from)
-
-            let exit = ctx.func.create_block();
-
+            let exit = ctx.create_block();
+            let mut ctx = BodyLoweringCtx { ctx: &mut ctx, body: body.borrow(), path: "" };
             ctx.check_param(
                 param_val,
                 &bounds,
@@ -337,7 +290,6 @@ impl HirInterner {
                 invalid,
                 exit,
             );
-
             ctx.check_param(
                 param_val,
                 &bounds,
@@ -347,12 +299,10 @@ impl HirInterner {
                 invalid,
                 exit,
             );
-
-            ctx.func.switch_to_block(exit);
+            ctx.ctx.switch_to_block(exit);
         }
-
-        builder.ensured_sealed();
-        builder.func.layout.append_inst_to_bb(term, builder.current_block());
+        ctx.ensured_sealed();
+        ctx.func.func.layout.append_inst_to_bb(term, ctx.current_block());
 
         for (i, param) in params.iter().copied().enumerate() {
             let val = &mut self.params.raw[&ParamKind::Param(param)];
@@ -363,7 +313,7 @@ impl HirInterner {
     }
 }
 
-impl LoweringCtx<'_, '_> {
+impl BodyLoweringCtx<'_, '_, '_> {
     #[allow(clippy::too_many_arguments)]
     fn check_param(
         &mut self,
@@ -385,7 +335,7 @@ impl LoweringCtx<'_, '_> {
             let exit = match exit {
                 Some(exit) => exit,
                 None => {
-                    let bb = self.func.create_block();
+                    let bb = self.ctx.create_block();
                     exit = Some(bb);
                     bb
                 }
@@ -397,10 +347,10 @@ impl LoweringCtx<'_, '_> {
                         .get(i)
                         .map_or_else(|| self.lower_expr(val), |(val, _)| *val);
 
-                    let is_ok = self.func.ins().binary1(ops.eq, val, param_val);
-                    let next_bb = self.func.create_block();
-                    self.func.ins().br(is_ok, exit, next_bb);
-                    self.func.switch_to_block(next_bb);
+                    let is_ok = self.ctx.ins().binary1(ops.eq, val, param_val);
+                    let next_bb = self.ctx.create_block();
+                    self.ctx.ins().br(is_ok, exit, next_bb);
+                    self.ctx.switch_to_block(next_bb);
                 }
                 ConstraintValue::Range(range) => {
                     let (start, end) = precomputed_vals.get(i).map_or_else(
@@ -409,9 +359,9 @@ impl LoweringCtx<'_, '_> {
                     );
 
                     let op = ops.in_bound(range.start_inclusive);
-                    let is_lo_ok = self.func.ins().binary1(op, start, param_val);
+                    let is_lo_ok = self.ctx.ins().binary1(op, start, param_val);
 
-                    let is_ok = self.func.make_select(is_lo_ok, |builder, is_ok| {
+                    let is_ok = self.ctx.make_select(is_lo_ok, |builder, is_ok| {
                         if is_ok {
                             let op = ops.in_bound(range.end_inclusive);
                             builder.ins().binary1(op, param_val, end)
@@ -420,9 +370,9 @@ impl LoweringCtx<'_, '_> {
                         }
                     });
 
-                    let next_bb = self.func.create_block();
-                    self.func.ins().br(is_ok, exit, next_bb);
-                    self.func.switch_to_block(next_bb);
+                    let next_bb = self.ctx.create_block();
+                    self.ctx.ins().br(is_ok, exit, next_bb);
+                    self.ctx.switch_to_block(next_bb);
                 }
             }
         }
@@ -431,21 +381,21 @@ impl LoweringCtx<'_, '_> {
             ConstraintKind::From => {
                 if let Some(exit) = exit {
                     // error on fallthrough
-                    self.func.ins().call(invalid, &[]);
-                    self.func.ins().jump(global_exit);
+                    self.ctx.ins().call(invalid, &[]);
+                    self.ctx.ins().jump(global_exit);
 
-                    self.func.switch_to_block(exit);
+                    self.ctx.switch_to_block(exit);
                 }
             }
 
             ConstraintKind::Exclude => {
-                self.func.ins().jump(global_exit);
+                self.ctx.ins().jump(global_exit);
 
                 if let Some(exit) = exit {
                     // error on fallthrough
-                    self.func.switch_to_block(exit);
-                    self.func.ins().call(invalid, &[]);
-                    self.func.ins().jump(global_exit);
+                    self.ctx.switch_to_block(exit);
+                    self.ctx.ins().call(invalid, &[]);
+                    self.ctx.ins().jump(global_exit);
                 }
             }
         }

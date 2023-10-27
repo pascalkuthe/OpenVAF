@@ -1,11 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
+mod ieee64;
 pub mod iter;
 mod macros;
 pub mod packed_option;
 pub mod pretty;
 pub mod vec;
+pub use crate::ieee64::Ieee64;
 
 pub const IS_CI: bool = option_env!("CI").is_some();
 pub const SKIP_HOST_TESTS: bool = option_env!("CI").is_some() && cfg!(windows);
@@ -47,6 +49,10 @@ pub fn ignore_never<T: ?Sized>(_: &T) -> bool {
 
 pub fn openvaf_test_data(test: &str) -> PathBuf {
     project_root().join("openvaf").join("test_data").join(test)
+}
+
+pub fn integration_test_dir(test: &str) -> PathBuf {
+    project_root().join("integration_tests").join(test)
 }
 
 pub fn is_va_file(path: &Path) -> bool {

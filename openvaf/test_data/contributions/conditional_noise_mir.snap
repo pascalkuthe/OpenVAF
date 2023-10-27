@@ -1,0 +1,25 @@
+function %(v16, v17, v20, v21) {
+    inst0 = const fn %white_noise(Spur(1))(1) -> 1
+    v3 = fconst 0.0
+    v6 = fconst 0x1.0000000000000p0
+
+                                block5:
+@0009                               v19 = flt v17, v3
+                                    br v19, block2, block3
+
+                                block2:
+@000f                               v22 = fmul v20, v21
+                                    v25 = fadd v17, v3
+                                    jmp block4
+
+                                block3:
+                                    jmp block4
+
+                                block4:
+                                    v35 = phi [v22, block2], [v3, block3]
+                                    v30 = phi [v25, block2], [v17, block3]
+                                    v33 = phi [v6, block2], [v3, block3]
+                                    v32 = optbarrier v30
+                                    v34 = optbarrier v33
+                                    v37 = optbarrier v35
+}

@@ -1,0 +1,187 @@
+Topology {
+    branches: {
+        branch0: (
+            Named(
+                BranchId(0),
+            ),
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: Some(
+                        v20,
+                    ),
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: Some(
+                        v47,
+                    ),
+                    resist: v60,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [
+                        Noise {
+                            name: Spur(1),
+                            kind: WhiteNoise {
+                                pwr: v67,
+                            },
+                            factor: v6,
+                        },
+                    ],
+                },
+            },
+        ),
+        branch1: (
+            Named(
+                BranchId(1),
+            ),
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: Some(
+                        v20,
+                    ),
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: None,
+                    resist: v61,
+                    react: v3,
+                    resist_small_signal: v80,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+            },
+        ),
+        branch2: (
+            Named(
+                BranchId(2),
+            ),
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: Some(
+                        v20,
+                    ),
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: None,
+                    resist: v62,
+                    react: v68,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+            },
+        ),
+        branch3: (
+            Unnamed {
+                hi: node0,
+                lo: Some(
+                    node1,
+                ),
+            },
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: None,
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: None,
+                    resist: v63,
+                    react: v70,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+            },
+        ),
+        branch4: (
+            Unnamed {
+                hi: node0,
+                lo: Some(
+                    node2,
+                ),
+            },
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: None,
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: None,
+                    resist: v64,
+                    react: v69,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+            },
+        ),
+        branch5: (
+            Unnamed {
+                hi: node2,
+                lo: Some(
+                    node1,
+                ),
+            },
+            BranchInfo {
+                is_voltage_src: v1,
+                voltage_src: Contribution {
+                    unknown: None,
+                    resist: v3,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [],
+                },
+                current_src: Contribution {
+                    unknown: None,
+                    resist: v65,
+                    react: v3,
+                    resist_small_signal: v3,
+                    react_small_signal: v3,
+                    noise: [
+                        Noise {
+                            name: Spur(2),
+                            kind: WhiteNoise {
+                                pwr: v71,
+                            },
+                            factor: v6,
+                        },
+                    ],
+                },
+            },
+        ),
+    },
+    implicit_equations: {},
+    small_signal_vals: {
+        v47,
+        v20,
+    },
+    contributes: {},
+}

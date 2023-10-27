@@ -288,7 +288,7 @@ impl DataFlowGraph {
         debug_assert_ne!(dest, src);
 
         if self.values.tag(src).is_none() {
-            self.values.set_tag(dest, self.values.tag(dest))
+            self.values.set_tag(src, self.values.tag(dest))
         }
 
         // replace values in instructions

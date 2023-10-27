@@ -1,0 +1,47 @@
+function %(v16, v17, v20, v22, v25, v26, v34, v41, v42, v45, v47, v48, v51, v54) {
+    inst0 = const fn %white_noise(Spur(1))(1) -> 1
+    inst1 = const fn %ddt(1) -> 1
+    inst2 = const fn %white_noise(Spur(2))(1) -> 1
+    v3 = fconst 0.0
+    v6 = fconst 0x1.0000000000000p0
+    v28 = fconst 0x1.0000000000000p-1
+
+                                block2:
+@0005                               v18 = fdiv v16, v17
+@000c                               v21 = fdiv v3, v17
+                                    v79 = fdiv v20, v17
+@0012                               v23 = fmul v22, v3
+                                    v78 = fmul v22, v20
+@0018                               v27 = sqrt v26
+@001a                               v29 = fmul v27, v28
+@001c                               v30 = fmul v29, v22
+@001f                               v31 = fmul v30, v3
+                                    v76 = fmul v30, v20
+@0021                               v33 = fneg v3
+                                    v66 = fneg v31
+                                    v77 = fneg v76
+@0036                               v44 = fmul v42, v27
+@0038                               v46 = fmul v44, v45
+@003a                               v49 = fdiv v3, v48
+                                    v73 = fdiv v47, v48
+@003b                               v50 = fmul v46, v49
+                                    v74 = fmul v46, v73
+@0041                               v52 = fmul v26, v51
+@0043                               v53 = fmul v52, v51
+@0047                               v55 = fmul v54, v54
+@0048                               v56 = fsub v6, v55
+@0049                               v57 = fmul v53, v56
+                                    v59 = fadd v50, v3
+                                    v60 = optbarrier v3
+                                    v61 = optbarrier v21
+                                    v62 = optbarrier v3
+                                    v63 = optbarrier v33
+                                    v64 = optbarrier v33
+                                    v65 = optbarrier v59
+                                    v67 = optbarrier v18
+                                    v68 = optbarrier v23
+                                    v69 = optbarrier v66
+                                    v70 = optbarrier v66
+                                    v71 = optbarrier v57
+                                    v80 = optbarrier v79
+}

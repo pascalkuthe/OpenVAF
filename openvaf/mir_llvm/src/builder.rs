@@ -6,7 +6,10 @@ use llvm::{
     LLVMBuildExtractValue, LLVMBuildICmp, LLVMBuildLoad2, LLVMBuildStore, LLVMGetReturnType,
     UNNAMED,
 };
-use mir::{Block, FuncRef, Function, Inst, Opcode, Param, PhiNode, Value, ValueDef, F_ZERO, ZERO};
+use mir::{
+    Block, ControlFlowGraph, FuncRef, Function, Inst, Opcode, Param, PhiNode, Value, ValueDef,
+    F_ZERO, ZERO,
+};
 use typed_index_collections::TiVec;
 
 use crate::callbacks::CallbackFun;
@@ -343,11 +346,15 @@ impl<'ll> Builder<'_, '_, 'll> {
     ///
     /// Must not be called if any block already contain any non-phi instruction (eg must not be
     /// called twice)
-    pub unsafe fn build_cfg(&mut self, blocks: &[Block]) {
+    pub unsafe fn build_func(&mut self) {
         let entry = self.func.layout.entry_block().unwrap();
         llvm::LLVMBuildBr(self.llbuilder, self.blocks[entry].unwrap());
-        for bb in blocks.iter().rev() {
-            self.build_bb(*bb)
+        let mut cfg = ControlFlowGraph::new();
+        cfg.compute(self.func);
+        let po: Vec<_> = cfg.postorder(self.func).collect();
+        drop(cfg);
+        for bb in po.into_iter().rev() {
+            self.build_bb(bb)
         }
 
         for (phi, llval) in self.unfinished_phis.iter() {
@@ -581,6 +588,13 @@ impl<'ll> Builder<'_, '_, 'll> {
                 llvm::LLVMBuildFSub(self.llbuilder, lhs, rhs, UNNAMED)
             }
             Opcode::Fmul => {
+                if matches!(self.values[args[0]], BuilderVal::Undef) {
+                    panic!(
+                        "{} {}",
+                        self.func.dfg.display_inst(inst),
+                        self.func.layout.inst_block(inst).unwrap()
+                    );
+                }
                 let lhs = self.values[args[0]].get(self);
                 let rhs = self.values[args[1]].get(self);
                 llvm::LLVMBuildFMul(self.llbuilder, lhs, rhs, UNNAMED)

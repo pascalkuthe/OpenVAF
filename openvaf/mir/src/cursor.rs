@@ -198,6 +198,33 @@ pub trait Cursor {
         self
     }
 
+    /// Rebuild this cursor positioned at the bottom of the last `block`.
+    ///
+    /// This is intended to be used as a builder method:
+    ///
+    /// ```
+    /// # use cranelift_codegen::{Function, Block, Inst};
+    /// # use cranelift_codegen::cursor::{Cursor, FuncCursor};
+    /// fn edit_func(func: &mut Function, block: Block) {
+    ///     let mut pos = FuncCursor::new(func).at_bottom(block);
+    ///
+    ///     // Use `pos`...
+    /// }
+    /// ```
+    fn at_exit(mut self) -> Self
+    where
+        Self: Sized,
+    {
+        self.goto_exit();
+        self
+    }
+
+    /// Go to the bottom of the exit `block`.
+    /// At this position, inserted instructions will be appended to `block`.
+    fn goto_exit(&mut self) {
+        self.goto_bottom(self.layout().last_block().unwrap());
+    }
+
     /// Get the block corresponding to the current position.
     fn current_block(&self) -> Option<Block> {
         use self::CursorPosition::*;
@@ -598,5 +625,17 @@ impl<'c, 'f> InstInserterBase<'c> for &'c mut FuncCursor<'f> {
             self.func.srclocs[inst] = self.srcloc;
         }
         &mut self.func.dfg
+    }
+}
+
+impl AsRef<Function> for FuncCursor<'_> {
+    fn as_ref(&self) -> &Function {
+        self.func
+    }
+}
+
+impl AsMut<Function> for FuncCursor<'_> {
+    fn as_mut(&mut self) -> &mut Function {
+        self.func
     }
 }

@@ -36,8 +36,9 @@ pub use crate::flowgraph::transversal::{Postorder, ReversePostorder};
 use crate::{Block, Function, InstructionData};
 
 mod transversal;
-// #[cfg(test)]
-// mod tests;
+
+pub type PredecessorIter<'a> = bforest::SetIter<'a, Block>;
+pub type PredecessorRevIter<'a> = bforest::RevSetIter<'a, Block>;
 
 /// A container for the successors and predecessors of some Block.
 #[derive(Clone, Default)]
@@ -294,8 +295,13 @@ impl ControlFlowGraph {
     }
 
     /// Get an iterator over the CFG predecessors to `block`.
-    pub fn pred_iter(&self, block: Block) -> bforest::SetIter<'_, Block> {
+    pub fn pred_iter(&self, block: Block) -> PredecessorIter<'_> {
         self.data[block].predecessors.iter(&self.pred_forest)
+    }
+
+    /// Get an iterator over the CFG predecessors to `block`.
+    pub fn pred_rev_iter(&self, block: Block) -> PredecessorRevIter<'_> {
+        self.data[block].predecessors.iter_rev(&self.pred_forest)
     }
 
     pub fn predecessors(&self, block: Block) -> &Set<Block> {

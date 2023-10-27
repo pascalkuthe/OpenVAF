@@ -150,6 +150,9 @@ where
     pub fn get_index(&self, index: I) -> Option<(&K, &V)> {
         self.raw.get_index(index.into())
     }
+    pub fn get(&self, key: &K) -> Option<&V> {
+        self.raw.get(key)
+    }
 }
 
 impl<I, K, V> Index<I> for TiMap<I, K, V>

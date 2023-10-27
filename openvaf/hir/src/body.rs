@@ -28,7 +28,7 @@ impl Body {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct BodyRef<'a> {
     body: &'a hir_def::body::Body,
     infere: &'a inference::InferenceResult,

@@ -2,14 +2,14 @@ use std::io::Write;
 use std::process::exit;
 use std::sync::Mutex;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use camino::Utf8PathBuf;
 use clap::ArgMatches;
 use mimalloc::MiMalloc;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 use cli_def::{main_command, INPUT};
-use openvaf::{compile, dump_json, expand, CompilationDestination, CompilationTermination, Opts};
+use openvaf::{compile, expand, CompilationDestination, CompilationTermination, Opts};
 
 use crate::cli_def::{DUMP_JSON, PRINT_EXPANSION};
 use crate::cli_process::matches_to_opts;
@@ -72,11 +72,12 @@ fn wrapped_main(matches: ArgMatches) -> Result<i32> {
         return Ok(res);
     }
     if dump_json_ {
-        let res = match dump_json(&opts)? {
-            CompilationTermination::Compiled { .. } => 0,
-            CompilationTermination::FatalDiagnostic => DATA_ERROR,
-        };
-        return Ok(res);
+        bail!("currently unimplemented");
+        // let res = match dump_json(&opts)? {
+        //     CompilationTermination::Compiled { .. } => 0,
+        //     CompilationTermination::FatalDiagnostic => DATA_ERROR,
+        // };
+        // return Ok(res);
     }
 
     let res = match compile(&opts)? {

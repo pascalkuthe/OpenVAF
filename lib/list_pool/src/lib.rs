@@ -313,6 +313,12 @@ impl<T: ReservedValue + Copy + Into<usize> + From<usize>> ListHandle<T> {
         }
     }
 
+    /// Create a deep clone of the list in a new pool, which does not alias the original list.
+    #[inline]
+    pub fn to_pool(&self, src: &ListPool<T>, dst: &mut ListPool<T>) -> Self {
+        Self::from_slice(self.as_slice(src), dst)
+    }
+
     /// Removes all elements from the list.
     ///
     /// The memory used by the list is put back in the pool.

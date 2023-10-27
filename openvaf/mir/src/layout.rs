@@ -79,6 +79,7 @@ impl Layout {
 /// blocks do not affect the semantics of the program.
 ///
 impl Layout {
+    #[inline]
     pub fn make_block(&mut self) -> Block {
         self.blocks.push_and_get_key(BlockNode {
             prev: None.into(),

@@ -10,8 +10,9 @@ use crate::dfg::values::ValueDataType;
 use crate::entities::{Inst, Param, Tag, Value};
 use crate::instructions::PhiForest;
 use crate::write::write_operands;
-use crate::{FuncRef, FunctionSignature, Ieee64, InstructionData, Use, ValueList};
+use crate::{Block, FuncRef, FunctionSignature, Ieee64, InstructionData, Use, ValueList};
 
+pub use crate::dfg::postorder::{Postorder, PostorderParts};
 pub use crate::dfg::uses::{DoubleEndedUseIter, InstUseIter, UseCursor, UseIter};
 pub use crate::dfg::values::{consts, Const, DfgValues, ValueDef};
 
@@ -20,6 +21,7 @@ mod tests;
 
 mod instructions;
 mod phis;
+mod postorder;
 mod uses;
 mod values;
 
@@ -94,11 +96,62 @@ impl DataFlowGraph {
     }
 
     pub fn call_signature(&self, inst: Inst) -> Option<&FunctionSignature> {
-        if let InstructionData::Call { func_ref, .. } = self.insts[inst] {
-            Some(&self.signatures[func_ref])
+        self.func_ref(inst).map(|func_ref| &self.signatures[func_ref])
+    }
+
+    pub fn as_branch(&self, inst: Inst) -> Option<(Value, Block, Block)> {
+        if let InstructionData::Branch { cond, then_dst, else_dst, .. } = self.insts[inst] {
+            Some((cond, then_dst, else_dst))
         } else {
             None
         }
+    }
+
+    pub fn func_ref(&self, inst: Inst) -> Option<FuncRef> {
+        if let InstructionData::Call { func_ref, .. } = self.insts[inst] {
+            Some(func_ref)
+        } else {
+            None
+        }
+    }
+
+    pub fn uses_postorder_with<'a, F: FnMut(Inst) -> bool>(
+        &'a self,
+        val: Value,
+        parts: PostorderParts<'a>,
+        descend: F,
+    ) -> Postorder<'a, F> {
+        let mut po = Postorder::from_parts(self, parts, descend);
+        po.populate(val);
+        po.traverse_successor();
+        po
+    }
+
+    pub fn inst_uses_postorder<F: FnMut(Inst) -> bool>(
+        &self,
+        inst: Inst,
+        descend: F,
+    ) -> Postorder<'_, F> {
+        let mut po = Postorder::new(self, descend);
+        for &res in self.inst_results(inst) {
+            po.populate(res);
+        }
+        po.traverse_successor();
+        po
+    }
+
+    pub fn inst_uses_postorder_with<'a, F: FnMut(Inst) -> bool>(
+        &'a self,
+        inst: Inst,
+        parts: PostorderParts<'a>,
+        descend: F,
+    ) -> Postorder<'a, F> {
+        let mut po = Postorder::from_parts(self, parts, descend);
+        for &res in self.inst_results(inst) {
+            po.populate(res);
+        }
+        po.traverse_successor();
+        po
     }
 }
 

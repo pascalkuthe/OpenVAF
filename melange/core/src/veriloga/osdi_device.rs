@@ -62,7 +62,7 @@ impl OsdiDescriptor {
                         let param = unsafe { err.payload.parameter_id };
                         let param = unsafe { *self.params()[param as usize].name };
                         let param = unsafe { osdi_str(param) };
-                        format_to!(msg, "vale supplied for parameter '{param}' is out of bounds\n")
+                        format_to!(msg, "value supplied for parameter '{param}' is out of bounds\n")
                     }
 
                     code => format_to!(msg, "unknown error: {code}\n"),

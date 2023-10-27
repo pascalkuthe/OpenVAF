@@ -6,6 +6,7 @@ pub use ast::ConstraintKind;
 use basedb::lints::{Lint, LintSrc};
 use basedb::{AttrDiagnostic, LintAttrs};
 use lower::LowerCtx;
+use stdx::Ieee64;
 use syntax::{ast, AstNode, AstPtr};
 
 use crate::db::HirDefDB;
@@ -132,7 +133,7 @@ impl Body {
                     ctx.collect_expr(expr)
                 } else {
                     let default_val = match db.var_data(var).ty {
-                        Type::Real => Literal::Float(0.0.into()),
+                        Type::Real => Literal::Float(Ieee64::with_float(0.0)),
                         Type::Integer => Literal::Int(0),
                         _ => unreachable!("invalid var type (TODO arrays)"),
                     };

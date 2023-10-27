@@ -14,11 +14,12 @@ use mir::{
 use crate::intern::{Derivative, DerivativeIntern};
 
 pub fn auto_diff(
-    func: &mut Function,
+    mut func: impl AsMut<Function>,
     dom_tree: &DominatorTree,
     derivatives: &KnownDerivatives,
     extra_derivatives: &[(Value, mir::Unknown)],
 ) -> AHashMap<(Value, mir::Unknown), Value> {
+    let func = func.as_mut();
     let mut intern = DerivativeIntern::new(derivatives);
     let live_derivative = LiveDerivatives::build(func, &mut intern, extra_derivatives, dom_tree);
     build_derivatives(func, &mut intern, &live_derivative, dom_tree.cfg_postorder())

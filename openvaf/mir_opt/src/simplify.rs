@@ -377,8 +377,8 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
 
             // See if "V === X - Z" simplifies.
             if let Some(v) = self.simplify_sub_inst::<A>(x, z) {
-                // It does!  Now see if "X + V" simplifies.
-                if let Some(w) = self.simplify_add_inst::<A>(v, y) {
+                // It does!  Now see if "V - Y" simplifies.
+                if let Some(w) = self.simplify_sub_inst::<A>(v, y) {
                     return Some(w);
                 }
             }
@@ -394,7 +394,7 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
             // See if "V === Z - X" simplifies.
             if let Some(v) = self.simplify_sub_inst::<A>(z, x) {
                 // It does!  Now see if "V + Y" simplifies.
-                if let Some(w) = self.simplify_sub_inst::<A>(v, y) {
+                if let Some(w) = self.simplify_add_inst::<A>(v, y) {
                     return Some(w);
                 }
             }
@@ -407,9 +407,9 @@ impl<'a, FP: Arithmetic, M: Fn(Value, &Function) -> Value> SimplifyCtx<'a, FP, M
     fn expand_add_over_mul<A: Arithmetic>(&mut self, val: Value, other: Value) -> Option<Value> {
         if let Some([lhs, rhs]) = self.as_binary(val, A::ADD) {
             // simplify a*x
-            let lhs_ = self.simplify_add_inst::<A>(lhs, other)?;
+            let lhs_ = self.simplify_mul_inst::<A>(lhs, other)?;
             // simplify b*x
-            let rhs_ = self.simplify_add_inst::<A>(rhs, other)?;
+            let rhs_ = self.simplify_mul_inst::<A>(rhs, other)?;
             // a*x == a && b*x == b ||  a*x == b && b*x == a => (a + b) * x == a + b
             if (lhs_ == lhs && rhs_ == rhs) || (lhs_ == rhs && rhs_ == lhs) {
                 return Some(val);

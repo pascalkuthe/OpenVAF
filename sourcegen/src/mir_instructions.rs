@@ -387,6 +387,19 @@ fn gen_instr_builder() {
             }
 
 
+            #[inline]
+            fn ensure_optbarrier(self, val: Value) -> Value {
+                match self.data_flow_graph().value_def(val) {
+                    crate::ValueDef::Result(inst, _)
+                        if self.data_flow_graph().insts[inst].opcode() == Opcode::OptBarrier =>
+                    {
+                        val
+                    }
+                    crate::ValueDef::Const(_) => val,
+                    _ => self.optbarrier(val),
+                }
+            }
+
             #(#opcode_funcs)*
         }
     };

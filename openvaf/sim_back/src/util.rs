@@ -1,94 +1,56 @@
 //! various utilities used in this crate
 
 use bitset::BitSet;
-use hir::BranchWrite;
-use hir_lower::{Dim, HirInterner, ParamKind, PlaceKind};
-use mir::{Function, Inst, InstructionData, Opcode, Value, ValueDef, F_ZERO};
+use hir_lower::HirInterner;
+use mir::builder::InstBuilder;
+use mir::cursor::{Cursor, FuncCursor};
+use mir::{strip_optbarrier, Function, Inst, Value, ValueDef, F_ZERO};
 
-pub fn strip_optbarrier(func: &Function, mut val: Value) -> Value {
-    while let Some(inst) = func.dfg.value_def(val).inst() {
-        if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } = func.dfg.insts[inst] {
-            val = arg;
-        } else {
-            break;
-        }
+pub fn strip_optbarrier_if_const(func: impl AsRef<Function>, val: Value) -> Value {
+    let func = func.as_ref();
+    let stripped = strip_optbarrier(func, val);
+    if func.dfg.value_def(stripped).as_const().is_some() {
+        stripped
+    } else {
+        val
     }
-    val
 }
 
 pub fn is_op_dependent(
-    func: &Function,
+    func: impl AsRef<Function>,
     val: Value,
     op_dependent_insts: &BitSet<Inst>,
     intern: &HirInterner,
 ) -> bool {
-    match func.dfg.value_def(val) {
+    match func.as_ref().dfg.value_def(val) {
         ValueDef::Result(inst, _) => op_dependent_insts.contains(inst),
         ValueDef::Param(param) => intern.params.get_index(param).unwrap().0.op_dependent(),
         ValueDef::Const(_) | ValueDef::Invalid => false,
     }
 }
 
-pub fn get_contrib(
-    func: &Function,
-    intern: &HirInterner,
-    branch: BranchWrite,
-    dim: Dim,
-    voltage_src: bool,
-) -> Value {
-    let contrib = PlaceKind::Contribute { dst: branch, dim, voltage_src };
-
-    intern
-        .outputs
-        .get(&contrib)
-        .and_then(|val| val.expand())
-        .map(|val| strip_optbarrier(func, val))
-        .unwrap_or(F_ZERO)
-}
-
-pub fn get_contrib_with_barrier(
-    intern: &HirInterner,
-    branch: BranchWrite,
-    dim: Dim,
-    voltage_src: bool,
-) -> Value {
-    let contrib = PlaceKind::Contribute { dst: branch, dim, voltage_src };
-
-    intern.outputs.get(&contrib).and_then(|val| val.expand()).unwrap_or(F_ZERO)
-}
-
-pub fn has_any_contrib(
-    func: &Function,
-    intern: &HirInterner,
-    branch: BranchWrite,
-    voltage_src: bool,
-) -> bool {
-    intern.dims.keys().any(|dim| get_contrib(func, intern, branch, dim, voltage_src) != F_ZERO)
-}
-
-pub struct SwitchBranchInfo {
-    pub op_dependent: bool,
-    pub introduce_unknown: bool,
-    pub non_trivial_voltage: bool,
-}
-
-impl SwitchBranchInfo {
-    pub fn analyze(
-        func: &Function,
-        intern: &HirInterner,
-        op_dependent_insts: &BitSet<Inst>,
-        is_voltage_src: Value,
-        branch: BranchWrite,
-    ) -> SwitchBranchInfo {
-        let requires_unknown = intern.is_param_live(func, &ParamKind::Current(branch.into()));
-        let op_dependent = is_op_dependent(func, is_voltage_src, op_dependent_insts, intern);
-
-        let non_trivial_voltage = has_any_contrib(func, intern, branch, true);
-        let introduce_unknown = requires_unknown || non_trivial_voltage;
-        SwitchBranchInfo { op_dependent, introduce_unknown, non_trivial_voltage }
+pub fn update_optbarrier(
+    func: &mut Function,
+    val: &mut Value,
+    update: impl FnOnce(Value, &mut FuncCursor) -> Value,
+) {
+    if let Some(inst) = func.dfg.value_def(*val).inst() {
+        let mut arg = func.dfg.instr_args(inst)[0];
+        arg = update(arg, &mut FuncCursor::new(func).at_inst(inst));
+        func.dfg.replace(inst).optbarrier(arg);
+    } else {
+        let mut cursor = FuncCursor::new(&mut *func).at_exit();
+        *val = update(*val, &mut cursor);
+        *val = cursor.ins().ensure_optbarrier(*val)
     }
+}
 
-    pub fn just_current_src(&self) -> bool {
-        !self.op_dependent && !self.introduce_unknown
+pub fn add(cursor: &mut FuncCursor, dst: &mut Value, val: Value, negate: bool) {
+    match (*dst, val) {
+        (_, F_ZERO) => (),
+        (F_ZERO, _) if negate => *dst = cursor.ins().fneg(val),
+        (F_ZERO, _) => *dst = val,
+        (old, _) if negate => *dst = cursor.ins().fsub(old, val),
+        (old, _) => *dst = cursor.ins().fadd(old, val),
     }
 }

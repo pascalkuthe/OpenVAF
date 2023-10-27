@@ -1,0 +1,26 @@
+function %(v16, v19, v20, v21, v32) {
+    inst0 = const fn %ddt(1) -> 1
+    // v1 = bconst false
+    // v2 = bconst true
+    v3 = fconst 0.0
+
+                                block5:
+@0003                               v18 = flt v16, v3
+                                    br v18, block2, block3
+
+                                block2:
+@000c                               v23 = fmul v20, v32
+                                    jmp block4
+
+                                block3:
+                                    jmp block4
+
+                                block4:
+                                    v37 = phi [v21, block2], [v3, block3]
+                                    v33 = phi [v1, block2], [v2, block3]
+                                    v29 = phi [v23, block2], [v3, block3]
+                                    v31 = optbarrier v29
+                                    v35 = optbarrier v33
+                                    v36 = fneg v32
+                                    v39 = optbarrier v37
+}

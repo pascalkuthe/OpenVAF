@@ -1,0 +1,42 @@
+function %(v16, v19, v21, v39) {
+    // v1 = bconst false
+    // v2 = bconst true
+    v3 = fconst 0.0
+    v6 = fconst 0x1.0000000000000p0
+    v7 = fconst -0x1.0000000000000p0
+                                block5:
+@0003                               v18 = flt v16, v3
+                                    br v18, block4, block3
+
+                                block3:
+                                    jmp block4
+
+                                block4:
+                                    v27 = phi [v3, block3], [v16, block5]
+                                    v25 = phi [v16, block3], [v3, block5]
+                                    v23 = phi [v1, block3], [v2, block5]
+                                    br v23, block6, block7
+
+                                block6:
+                                    jmp block7
+
+                                block7:
+                                    v29 = phi [v21, block4], [v19, block6]
+                                    v33 = phi [v3, block4], [v6, block6]
+                                    v34 = phi [v6, block4], [v3, block6]
+                                    v30 = phi [v25, block4], [v27, block6]
+                                    v31 = fsub v30, v29
+                                    v35 = fsub v3, v33
+                                    v36 = fsub v3, v34
+                                    v32 = fneg v21
+                                    v41 = fmul v39, v21
+                                    v40 = optbarrier v41
+                                    v43 = fmul v39, v32
+                                    v42 = optbarrier v43
+                                    v44 = optbarrier v31
+                                    v48 = fmul v39, v7
+                                    v47 = optbarrier v48
+                                    v49 = optbarrier v35
+                                    v50 = optbarrier v33
+                                    v51 = optbarrier v36
+}

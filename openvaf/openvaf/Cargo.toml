@@ -16,7 +16,6 @@ osdi = { version = "0.0.0", path = "../osdi" }
 
 llvm = { version = "0.0.0", path = "../llvm" }
 mir_llvm = { version = "0.0.0", path = "../mir_llvm" }
-hir_lower = { version = "0.0.0", path = "../hir_lower" }
 hir = { version = "0.0.0", path = "../hir" }
 target = { version = "0.0.0", path = "../target" }
 linker = { version = "0.0.0", path = "../linker" }
@@ -30,3 +29,16 @@ anyhow = "1"
 termcolor = "1.2"
 camino = "1.1.4"
 
+[dev-dependencies]
+libloading = "0.8"
+libc = "0.2"
+float-cmp =  "0.9"
+mini_harness = { version = "0.0.1", path = "../../lib/mini_harness" }
+stdx = { version = "0.0.0", path = "../../lib/stdx" }
+expect-test = "1.4"
+bitflags = "2.4.1"
+indexmap = "2.0"
+
+[[test]]
+name = "integration"
+harness = false

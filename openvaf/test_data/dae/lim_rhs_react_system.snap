@@ -1,0 +1,52 @@
+DaeSystem {
+    unknowns: {
+        sim_node0: node0,
+        sim_node1: node1,
+    },
+    residual: {
+        sim_node0: Residual {
+            resist: v3,
+            react: v47,
+            resist_small_signal: v3,
+            react_small_signal: v3,
+            resist_lim_rhs: v3,
+            react_lim_rhs: v49,
+        },
+        sim_node1: Residual {
+            resist: v3,
+            react: v51,
+            resist_small_signal: v3,
+            react_small_signal: v3,
+            resist_lim_rhs: v3,
+            react_lim_rhs: v53,
+        },
+    },
+    jacobian: {
+        j0: MatrixEntry {
+            row: sim_node0,
+            col: sim_node0,
+            resist: v3,
+            react: v55,
+        },
+        j1: MatrixEntry {
+            row: sim_node0,
+            col: sim_node1,
+            resist: v3,
+            react: v57,
+        },
+        j2: MatrixEntry {
+            row: sim_node1,
+            col: sim_node0,
+            resist: v3,
+            react: v59,
+        },
+        j3: MatrixEntry {
+            row: sim_node1,
+            col: sim_node1,
+            resist: v3,
+            react: v61,
+        },
+    },
+    small_signal_parameters: {},
+    noise_sources: [],
+}

@@ -30,7 +30,7 @@ mod set;
 mod tests;
 
 pub use self::map::{Map, MapCursor, MapForest, MapIter};
-pub use self::set::{Set, SetCursor, SetForest, SetIter};
+pub use self::set::{RevSetIter, Set, SetCursor, SetForest, SetIter};
 
 use self::node::NodeData;
 use self::path::Path;

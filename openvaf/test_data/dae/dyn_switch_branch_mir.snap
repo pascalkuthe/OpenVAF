@@ -1,0 +1,51 @@
+function %(v16, v19, v22, v44) {
+    // v1 = bconst false
+    // v2 = bconst true
+    v3 = fconst 0.0
+    v6 = fconst 0x1.0000000000000p0
+    v7 = fconst -0x1.0000000000000p0
+                                block5:
+@0005                               v18 = flt v16, v3
+                                    br v18, block2, block3
+
+                                block2:
+@000d                               v20 = fmul v19, v16
+                                    jmp block4
+
+                                block3:
+@0015                               v23 = fmul v19, v16
+                                    jmp block4
+
+                                block4:
+                                    v29 = phi [v20, block2], [v3, block3]
+                                    v35 = phi [v19, block2], [v3, block3]
+                                    v27 = phi [v3, block2], [v23, block3]
+                                    v36 = phi [v3, block2], [v19, block3]
+                                    v25 = phi [v2, block2], [v1, block3]
+                                    br v25, block6, block7
+
+                                block6:
+                                    jmp block7
+
+                                block7:
+                                    v31 = phi [v22, block4], [v16, block6]
+                                    v37 = phi [v3, block4], [v6, block6]
+                                    v38 = phi [v6, block4], [v3, block6]
+                                    v32 = phi [v27, block4], [v29, block6]
+                                    v39 = phi [v36, block4], [v35, block6]
+                                    v33 = fsub v32, v31
+                                    v40 = fsub v39, v37
+                                    v41 = fsub v3, v38
+                                    v34 = fneg v22
+                                    v43 = fneg v40
+                                    v46 = fmul v44, v22
+                                    v45 = optbarrier v46
+                                    v48 = fmul v44, v34
+                                    v47 = optbarrier v48
+                                    v49 = optbarrier v33
+                                    v53 = fmul v44, v7
+                                    v52 = optbarrier v53
+                                    v54 = optbarrier v40
+                                    v55 = optbarrier v43
+                                    v56 = optbarrier v41
+}

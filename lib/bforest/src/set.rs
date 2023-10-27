@@ -180,6 +180,11 @@ where
         SetIter { root: self.root, pool: &forest.nodes, path: Path::default() }
     }
 
+    /// Create an iterator traversing this set. The iterator type is `K`.
+    pub fn iter_rev<'a>(&'a self, forest: &'a SetForest<K>) -> RevSetIter<'a, K> {
+        RevSetIter { root: self.root, pool: &forest.nodes, path: Path::default() }
+    }
+
     /// create a `SetPos` which allows streaming iteration of the set
     pub fn read_cursor(self) -> SetPos<K> {
         SetPos { root: self.root, path: Path::default() }
@@ -335,6 +340,28 @@ where
             Some(root) => Some(self.path.first(root, self.pool).0),
             None => self.path.next(self.pool).map(|(k, _)| k),
         }
+    }
+}
+
+/// An iterator visiting the elements of a `Set`.
+#[derive(Clone, Copy)]
+pub struct RevSetIter<'a, K>
+where
+    K: 'a + Copy,
+{
+    root: PackedOption<Node>,
+    pool: &'a NodePool<SetTypes<K>>,
+    path: Path<SetTypes<K>>,
+}
+
+impl<'a, K> Iterator for RevSetIter<'a, K>
+where
+    K: 'a + Copy,
+{
+    type Item = K;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.path.prev(self.root.expand()?, self.pool).map(|(k, _)| k)
     }
 }
 

@@ -55,16 +55,19 @@ pub fn stub_callbacks<'ll>(
                 CallBackKind::SimParam => sim_param_stub(cx),
                 CallBackKind::SimParamOpt => sim_param_opt_stub(cx),
                 CallBackKind::SimParamStr => sim_param_str_stub(cx),
-                CallBackKind::Derivative(_) | CallBackKind::NodeDerivative(_) => {
+                CallBackKind::Derivative(_)
+                | CallBackKind::NodeDerivative(_)
+                | CallBackKind::TimeDerivative
+                | CallBackKind::FlickerNoise { .. }
+                | CallBackKind::WhiteNoise { .. }
+                | CallBackKind::NoiseTable(_) => {
                     cx.const_callback(&[cx.ty_double()], cx.const_real(0.0))
                 }
                 CallBackKind::Print { .. }
-                | CallBackKind::BoundStep
                 | CallBackKind::ParamInfo(_, _)
                 | CallBackKind::BuiltinLimit { .. }
                 | CallBackKind::StoreLimit(_)
                 | CallBackKind::LimDiscontinuity
-                | CallBackKind::StoreDelayTime(_)
                 | CallBackKind::CollapseHint(_, _) => return None,
                 CallBackKind::Analysis => cx.const_callback(&[cx.ty_ptr()], cx.const_int(1)),
             };
@@ -398,7 +401,7 @@ impl CodegenCtx<'_, '_> {
         unsafe {
             // the actual compiled function
             builder.build_consts();
-            builder.build_cfg(&postorder);
+            builder.build_func();
 
             // write the return value
             builder.select_bb(exit_bb);
@@ -738,7 +741,7 @@ impl CodegenCtx<'_, '_> {
         unsafe {
             // the actual compiled function
             builder.build_consts();
-            builder.build_cfg(&postorder);
+            builder.build_func();
 
             // write the return values
             builder.select_bb(postorder[0]);

@@ -111,6 +111,10 @@ where
     K: From<usize> + Debug,
     V: Eq + Hash + Debug,
 {
+    pub fn indices(&self) -> impl Iterator<Item = K> {
+        (0..self.raw.len()).map(K::from)
+    }
+
     pub fn unwrap_index(&self, val: &V) -> K {
         match self.raw.get_index_of(val) {
             Some(i) => i.into(),

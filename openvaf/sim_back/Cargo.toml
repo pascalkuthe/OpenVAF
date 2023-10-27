@@ -13,7 +13,6 @@ doctest = false
 stdx = { version = "0.0.0", path = "../../lib/stdx" }
 typed_indexmap = {version = "0.0.0", path = "../../lib/typed_indexmap"}
 bitset = {version = "0.0.0", path = "../../lib/bitset"}
-paths = {version = "0.0", path = "../../lib/paths"}
 
 syntax = { version = "0.0.0", path = "../syntax" }
 hir = { version = "0.0.0", path = "../hir" }
@@ -22,7 +21,6 @@ hir_lower = {version ="0.0.0", path ="../hir_lower"}
 mir = { version = "0.0.0", path = "../mir" }
 mir_autodiff = { version = "0.0.0", path = "../mir_autodiff" }
 mir_opt = { version = "0.0.0", path = "../mir_opt" }
-workqueue = {version = "0.0.0", path = "../../lib/workqueue" }
 
 typed-index-collections = "3.1"
 ahash = "0.8"
@@ -30,9 +28,11 @@ lasso = {version = "0.7", features = ["ahash"]}
 
 indexmap = "2.0"
 smol_str = {version = "0.2", default_features=false}
+cov-mark = { version = "1.1.0", default-features = false }
+mir_build = { version = "0.0.0", path = "../mir_build" }
 
 [dev-dependencies]
-
+cov-mark = { version = "1.1.0", default-features = true }
 expect-test = "1.4"
 indoc = "2.0.3"
 

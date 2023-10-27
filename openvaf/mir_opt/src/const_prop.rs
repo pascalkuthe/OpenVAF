@@ -50,9 +50,19 @@ pub fn sparse_conditional_constant_propagation(func: &mut Function, cfg: &Contro
             }
         } else if let ValueDef::Result(inst, _) = func.dfg.value_def(val) {
             if let Some(bb) = func.layout.inst_block(inst) {
-                if !executable_blocks.contains(bb) && Some(inst) != func.layout.last_inst(bb) {
+                if !executable_blocks.contains(bb) {
                     func.dfg.zap_inst(inst);
                     func.layout.remove_inst(inst)
+                }
+            }
+        }
+    }
+    for bb in func.layout.blocks() {
+        if !executable_blocks.contains(bb) {
+            if let Some(last_inst) = func.layout.last_inst(bb) {
+                // break loops so bb simplify has an easier time
+                if let InstructionData::Branch { cond, .. } = &mut func.dfg.insts[last_inst] {
+                    *cond = FALSE;
                 }
             }
         }

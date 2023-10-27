@@ -16,7 +16,6 @@ extern "C" {
     fn LLVMInitializeInstCombine(R: *mut PassRegistry);
     // fn LLVMInitializeAggressiveInstCombiner(R: *mut PassRegistry);
     fn LLVMInitializeIPO(R: *mut PassRegistry);
-    fn LLVMInitializeInstrumentation(R: *mut PassRegistry);
     fn LLVMInitializeAnalysis(R: *mut PassRegistry);
     fn LLVMInitializeCodeGen(R: *mut PassRegistry);
     fn LLVMInitializeTarget(R: *mut PassRegistry);
@@ -117,7 +116,6 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
     LLVMInitializeAnalysis(registry);
     LLVMInitializeTransformUtils(registry);
     LLVMInitializeInstCombine(registry);
-    LLVMInitializeInstrumentation(registry);
     LLVMInitializeTarget(registry);
 
     initialize_available_targets();

@@ -208,7 +208,11 @@ fn four_level() {
     let mut f = SetForest::<i32>::new();
     let mut s = dense4l(&mut f);
 
-    assert_eq!(s.iter(&f).collect::<Vec<_>>()[0..10], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    let fwd_iter = s.iter(&f).collect::<Vec<_>>();
+    assert_eq!(fwd_iter[0..10], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    let mut rev_iter = s.iter_rev(&f).collect::<Vec<_>>();
+    rev_iter.reverse();
+    assert_eq!(fwd_iter, rev_iter);
 
     let mut c = s.cursor(&mut f, &());
 

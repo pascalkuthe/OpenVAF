@@ -1,0 +1,409 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "dta"
+units = "degC", desc = "Difference between the local and global ambient temperatures", flags = ParameterFlags(PARA_KIND_INST)
+param "mult"
+units = "", desc = "Multiplication factor", flags = ParameterFlags(PARA_KIND_INST)
+param "version"
+units = "", desc = "Model version", flags = ParameterFlags(0x0)
+param "type"
+units = "", desc = "Flag for NPN (1) or PNP (-1) transistor type", flags = ParameterFlags(PARA_TY_INT)
+param "tref"
+units = "degC", desc = "Reference temperature", flags = ParameterFlags(0x0)
+param "exmod"
+units = "", desc = "Flag for extended modeling of the reverse current gain", flags = ParameterFlags(PARA_TY_INT)
+param "exphi"
+units = "", desc = "Flag for distributed high-frequency effects in transient", flags = ParameterFlags(PARA_TY_INT)
+param "exavl"
+units = "", desc = "Flag for extended modeling of avalanche currents", flags = ParameterFlags(PARA_TY_INT)
+param "exsub"
+units = "", desc = "Flag for extended modeling of substrate currents", flags = ParameterFlags(PARA_TY_INT)
+param "is"
+units = "A", desc = "Saturation current of main current", flags = ParameterFlags(0x0)
+param "nff"
+units = "", desc = "Non-ideality factor of forward main current", flags = ParameterFlags(0x0)
+param "nfr"
+units = "", desc = "Non-ideality factor of reverse main current", flags = ParameterFlags(0x0)
+param "ik"
+units = "A", desc = "CE high injection knee current", flags = ParameterFlags(0x0)
+param "ver"
+units = "V", desc = "Reverse Early voltage", flags = ParameterFlags(0x0)
+param "vef"
+units = "V", desc = "Forward Early voltage", flags = ParameterFlags(0x0)
+param "ibi"
+units = "A", desc = "Saturation current of ideal base current", flags = ParameterFlags(0x0)
+param "nbi"
+units = "", desc = "Non-ideality factor of ideal base current", flags = ParameterFlags(0x0)
+param "ibis"
+units = "A", desc = "Saturation current of ideal side wall base current", flags = ParameterFlags(0x0)
+param "nbis"
+units = "", desc = "Non-ideality factor of ideal side wall base current", flags = ParameterFlags(0x0)
+param "ibf"
+units = "A", desc = "Saturation current of non-ideal forward base current", flags = ParameterFlags(0x0)
+param "mlf"
+units = "", desc = "Non-ideality factor of non-ideal forward base current", flags = ParameterFlags(0x0)
+param "ibfs"
+units = "A", desc = "Saturation current of non-ideal side wall forward base current", flags = ParameterFlags(0x0)
+param "mlfs"
+units = "", desc = "Non-ideality factor of non-ideal side wall forward base current", flags = ParameterFlags(0x0)
+param "ibx"
+units = "A", desc = "Saturation current of extrinsic reverse base current", flags = ParameterFlags(0x0)
+param "ikbx"
+units = "A", desc = "Extrinsic CB high injection knee current", flags = ParameterFlags(0x0)
+param "ibr"
+units = "A", desc = "Saturation current of non-ideal reverse base current", flags = ParameterFlags(0x0)
+param "mlr"
+units = "", desc = "Non-ideality factor of non-ideal reverse base current", flags = ParameterFlags(0x0)
+param "xext"
+units = "", desc = "Part of currents and charges that belong to extrinsic region", flags = ParameterFlags(0x0)
+param "izeb"
+units = "A", desc = "Pre-factor of EB Zener tunneling current", flags = ParameterFlags(0x0)
+param "nzeb"
+units = "", desc = "Coefficient of EB Zener tunneling current", flags = ParameterFlags(0x0)
+param "izcb"
+units = "A", desc = "Pre-factor of CB Zener tunneling current", flags = ParameterFlags(0x0)
+param "nzcb"
+units = "", desc = "Coefficient of CB Zener tunneling current", flags = ParameterFlags(0x0)
+param "swavl"
+units = "", desc = "Switch of avalanche factor Gem model", flags = ParameterFlags(PARA_TY_INT)
+param "aavl"
+units = "", desc = "aavl of swavl=1 Gem model", flags = ParameterFlags(0x0)
+param "cavl"
+units = "", desc = "cavl of swavl=1 Gem model", flags = ParameterFlags(0x0)
+param "itoavl"
+units = "A", desc = "Current dependence parameter of swavl=1 Gem model", flags = ParameterFlags(0x0)
+param "bavl"
+units = "", desc = "bavl of swavl=1 Gem model", flags = ParameterFlags(0x0)
+param "vdcavl"
+units = "V", desc = "CB diffusion voltage dedicated for swavl=1 Gem model", flags = ParameterFlags(0x0)
+param "wavl"
+units = "m", desc = "Epilayer thickness used in weak-avalanche model", flags = ParameterFlags(0x0)
+param "vavl"
+units = "V", desc = "Voltage determining curvature of avalanche current", flags = ParameterFlags(0x0)
+param "sfh"
+units = "", desc = "Current spreading factor of avalanche model when exavl=1", flags = ParameterFlags(0x0)
+param "re"
+units = "Ohm", desc = "Emitter resistance", flags = ParameterFlags(0x0)
+param "rbc"
+units = "Ohm", desc = "Constant part of base resistance", flags = ParameterFlags(0x0)
+param "rbv"
+units = "Ohm", desc = "Zero-bias value of variable part of the base resistance", flags = ParameterFlags(0x0)
+param "rcc"
+units = "Ohm", desc = "Constant part of collector resistance", flags = ParameterFlags(0x0)
+param "rcblx"
+units = "Ohm", desc = "Resistance Collector Buried Layer extrinsic", flags = ParameterFlags(0x0)
+param "rcbli"
+units = "Ohm", desc = "Resistance Collector Buried Layer Intrinsic", flags = ParameterFlags(0x0)
+param "rcv"
+units = "Ohm", desc = "Resistance of un-modulated epilayer", flags = ParameterFlags(0x0)
+param "scrcv"
+units = "Ohm", desc = "Space charge resistance of epilayer", flags = ParameterFlags(0x0)
+param "ihc"
+units = "A", desc = "Critical current for velocity saturation in epilayer", flags = ParameterFlags(0x0)
+param "axi"
+units = "", desc = "Smoothness parameter for onset of quasi-saturation", flags = ParameterFlags(0x0)
+param "vdc"
+units = "V", desc = "CB diffusion voltage", flags = ParameterFlags(0x0)
+param "cje"
+units = "F", desc = "Zero-bias EB depletion capacitance", flags = ParameterFlags(0x0)
+param "vde"
+units = "V", desc = "EB diffusion voltage", flags = ParameterFlags(0x0)
+param "pe"
+units = "", desc = "EB grading coefficient", flags = ParameterFlags(0x0)
+param "xcje"
+units = "", desc = "Sidewall fraction of EB depletion capacitance", flags = ParameterFlags(0x0)
+param "cbeo"
+units = "F", desc = "EB overlap capacitance", flags = ParameterFlags(0x0)
+param "cjc"
+units = "F", desc = "Zero-bias CB depletion capacitance", flags = ParameterFlags(0x0)
+param "vdcctc"
+units = "V", desc = "CB diffusion voltage of depletion capacitance", flags = ParameterFlags(0x0)
+param "pc"
+units = "", desc = "CB grading coefficient", flags = ParameterFlags(0x0)
+param "swvchc"
+units = "", desc = "Switch of Vch for CB depletion capacitance", flags = ParameterFlags(PARA_TY_INT)
+param "swvjunc"
+units = "", desc = "Switch of Vjunc for collector junction capacitance", flags = ParameterFlags(PARA_TY_INT)
+param "xp"
+units = "", desc = "Constant part of Cjc", flags = ParameterFlags(0x0)
+param "mc"
+units = "", desc = "Coefficient for current modulation of CB depletion capacitance", flags = ParameterFlags(0x0)
+param "xcjc"
+units = "", desc = "Fraction of CB depletion capacitance under the emitter", flags = ParameterFlags(0x0)
+param "cbco"
+units = "F", desc = "CB overlap capacitance", flags = ParameterFlags(0x0)
+param "mtau"
+units = "", desc = "Non-ideality factor of emitter stored charge", flags = ParameterFlags(0x0)
+param "taue"
+units = "s", desc = "Minimum transit time of stored emitter charge", flags = ParameterFlags(0x0)
+param "taub"
+units = "s", desc = "Transit time of stored base charge", flags = ParameterFlags(0x0)
+param "tepi"
+units = "s", desc = "Transit time of stored epilayer charge", flags = ParameterFlags(0x0)
+param "taur"
+units = "s", desc = "Transit time of reverse extrinsic stored base charge", flags = ParameterFlags(0x0)
+param "deg"
+units = "eV", desc = "Bandgap difference over the base", flags = ParameterFlags(0x0)
+param "xrec"
+units = "", desc = "Pre-factor of the recombination part of Ib1", flags = ParameterFlags(0x0)
+param "xqb"
+units = "", desc = "Emitter-fraction of base diffusion charge", flags = ParameterFlags(0x0)
+param "ke"
+units = "", desc = "Fraction of QE in excess phase shift", flags = ParameterFlags(0x0)
+param "aqbo"
+units = "", desc = "Temperature coefficient of zero-bias base charge", flags = ParameterFlags(0x0)
+param "ae"
+units = "", desc = "Temperature coefficient of resistivity of the emitter", flags = ParameterFlags(0x0)
+param "ab"
+units = "", desc = "Temperature coefficient of resistivity of the base", flags = ParameterFlags(0x0)
+param "aepi"
+units = "", desc = "Temperature coefficient of resistivity of the epilayer", flags = ParameterFlags(0x0)
+param "aex"
+units = "", desc = "Temperature coefficient of resistivity of the extrinsic base", flags = ParameterFlags(0x0)
+param "ac"
+units = "", desc = "Temperature coefficient of resistivity of the collector contact", flags = ParameterFlags(0x0)
+param "acx"
+units = "", desc = "Temperature coefficient of extrinsic reverse base current", flags = ParameterFlags(0x0)
+param "acbl"
+units = "", desc = "Temperature coefficient of resistivity of the collector buried layer", flags = ParameterFlags(0x0)
+param "vgb"
+units = "V", desc = "Band-gap voltage of base", flags = ParameterFlags(0x0)
+param "vgc"
+units = "V", desc = "Band-gap voltage of collector", flags = ParameterFlags(0x0)
+param "vge"
+units = "V", desc = "Band-gap voltage of emitter", flags = ParameterFlags(0x0)
+param "vgcx"
+units = "V", desc = "Band-gap voltage of extrinsic collector", flags = ParameterFlags(0x0)
+param "vgj"
+units = "V", desc = "Band-gap voltage recombination EB junction", flags = ParameterFlags(0x0)
+param "vgzeb"
+units = "V", desc = "Band-gap voltage at Tref for EB tunneling", flags = ParameterFlags(0x0)
+param "avgeb"
+units = "V/K", desc = "Temperature coefficient of band-gap voltage for EB tunneling", flags = ParameterFlags(0x0)
+param "tvgeb"
+units = "K", desc = "Temperature coefficient of band-gap voltage for EB tunneling", flags = ParameterFlags(0x0)
+param "vgzcb"
+units = "V", desc = "Band-gap voltage at Tref for CB tunneling", flags = ParameterFlags(0x0)
+param "avgcb"
+units = "V/K", desc = "Temperature coefficient of band-gap voltage for CB tunneling", flags = ParameterFlags(0x0)
+param "tvgcb"
+units = "K", desc = "Temperature coefficient of band-gap voltage for CB tunneling", flags = ParameterFlags(0x0)
+param "dvgte"
+units = "V", desc = "Band-gap voltage difference of emitter stored charge", flags = ParameterFlags(0x0)
+param "dais"
+units = "", desc = "Fine tuning of temperature dependence of CE saturation current", flags = ParameterFlags(0x0)
+param "tnff"
+units = "/K", desc = "Temperature coefficient of nff", flags = ParameterFlags(0x0)
+param "tnfr"
+units = "/K", desc = "Temperature coefficient of nfr", flags = ParameterFlags(0x0)
+param "tbavl"
+units = "", desc = "Temperature scaling parameter of bavl when swavl=1", flags = ParameterFlags(0x0)
+param "af"
+units = "", desc = "Exponent of Flicker-noise of ideal base current", flags = ParameterFlags(0x0)
+param "afn"
+units = "", desc = "Exponent of Flicker-noise of non-ideal base current", flags = ParameterFlags(0x0)
+param "kf"
+units = "", desc = "Flicker-noise coefficient of ideal base current", flags = ParameterFlags(0x0)
+param "kfn"
+units = "", desc = "Flicker-noise coefficient of non-ideal base current", flags = ParameterFlags(0x0)
+param "kavl"
+units = "", desc = "Switch for white noise contribution due to avalanche", flags = ParameterFlags(PARA_TY_INT)
+param "kc"
+units = "", desc = "Switch for RF correlation noise model selection", flags = ParameterFlags(PARA_TY_INT)
+param "ftaun"
+units = "", desc = "Fraction of noise transit time to total transit time", flags = ParameterFlags(0x0)
+param "iss"
+units = "A", desc = "Saturation current of parasitic BCS transistor main current", flags = ParameterFlags(0x0)
+param "icss"
+units = "A", desc = "CS ideal saturation current", flags = ParameterFlags(0x0)
+param "iks"
+units = "A", desc = "Knee current for BCS transistor main current", flags = ParameterFlags(0x0)
+param "cjs"
+units = "F", desc = "Zero-bias CS depletion capacitance", flags = ParameterFlags(0x0)
+param "vds"
+units = "V", desc = "CS diffusion voltage", flags = ParameterFlags(0x0)
+param "ps"
+units = "", desc = "CS grading coefficient", flags = ParameterFlags(0x0)
+param "vgs"
+units = "V", desc = "Band-gap voltage of the substrate", flags = ParameterFlags(0x0)
+param "as"
+units = "", desc = "Substrate temperature coefficient", flags = ParameterFlags(0x0)
+param "asub"
+units = "", desc = "Temperature coefficient for mobility of minorities in the substrate", flags = ParameterFlags(0x0)
+param "rth"
+units = "K/W", desc = "Thermal resistance", flags = ParameterFlags(0x0)
+param "cth"
+units = "J/K", desc = "Thermal capacitance", flags = ParameterFlags(0x0)
+param "ath"
+units = "", desc = "Temperature coefficient of thermal resistance", flags = ParameterFlags(0x0)
+param "isibrel"
+units = "A", desc = "Saturation current of base current for reliability simulation", flags = ParameterFlags(0x0)
+param "nfibrel"
+units = "", desc = "Non-ideality factor of base current for reliability simulation", flags = ParameterFlags(0x0)
+param "gmin"
+units = "", desc = "Minimum conductance", flags = ParameterFlags(0x0)
+
+5 terminals
+node "c" units = "V", runits = ""
+residual 2608 2616 4294967295 4294967295
+node "b" units = "V", runits = ""
+residual 2624 2632 4294967295 4294967295
+node "e" units = "V", runits = ""
+residual 2640 2648 4294967295 4294967295
+node "s" units = "V", runits = ""
+residual 2656 2664 4294967295 4294967295
+node "dt" units = "V", runits = ""
+residual 2672 2680 4294967295 4294967295
+node "e1" units = "V", runits = ""
+residual 2688 2696 4294967295 4294967295
+node "b1" units = "V", runits = ""
+residual 2704 2712 4294967295 4294967295
+node "b2" units = "V", runits = ""
+residual 2720 2728 4294967295 4294967295
+node "c1" units = "V", runits = ""
+residual 2736 2744 4294967295 4294967295
+node "c2" units = "V", runits = ""
+residual 2752 2760 4294967295 4294967295
+node "c3" units = "V", runits = ""
+residual 2768 2776 4294967295 4294967295
+node "c4" units = "V", runits = ""
+residual 2784 2792 4294967295 4294967295
+node "noi" units = "V", runits = ""
+residual 4294967295 4294967295 4294967295 4294967295
+node "implicit_equation_0" units = "", runits = ""
+residual 4294967295 2800 4294967295 4294967295
+jacobian (c, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 832
+jacobian (c, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 840
+jacobian (c, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b, c) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 848
+jacobian (b, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 856
+jacobian (b, e) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 864
+jacobian (b, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 872
+jacobian (b, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 880
+jacobian (b, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 888
+jacobian (b, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 896
+jacobian (b, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 904
+jacobian (b, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 912
+jacobian (b, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 920
+jacobian (e, b) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 928
+jacobian (e, e) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 936
+jacobian (e, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (e, e1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 944
+jacobian (s, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 952
+jacobian (s, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 960
+jacobian (s, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (s, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, e) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 968
+jacobian (dt, e1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, b2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (dt, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (e1, e) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (e1, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 976
+jacobian (e1, e1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 984
+jacobian (e1, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 992
+jacobian (e1, b2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1000
+jacobian (e1, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1008
+jacobian (e1, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1016
+jacobian (e1, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b1, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b1, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b1, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1024
+jacobian (b1, e1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1032
+jacobian (b1, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1040
+jacobian (b1, b2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1048
+jacobian (b1, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1056
+jacobian (b1, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1064
+jacobian (b1, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1072
+jacobian (b2, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1080
+jacobian (b2, e1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1088
+jacobian (b2, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1096
+jacobian (b2, b2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1104
+jacobian (b2, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1112
+jacobian (b2, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1120
+jacobian (b2, noi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (b2, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c1, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c1, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1128
+jacobian (c1, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1136
+jacobian (c1, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1144
+jacobian (c1, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1152
+jacobian (c1, b2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c1, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1160
+jacobian (c1, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1168
+jacobian (c1, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1176
+jacobian (c1, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1184
+jacobian (c2, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1192
+jacobian (c2, e1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1200
+jacobian (c2, b2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1208
+jacobian (c2, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1216
+jacobian (c2, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1224
+jacobian (c2, noi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c3, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c3, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1232
+jacobian (c3, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1240
+jacobian (c3, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1248
+jacobian (c3, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1256
+jacobian (c3, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1264
+jacobian (c3, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1272
+jacobian (c3, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1280
+jacobian (c3, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1288
+jacobian (c4, c) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (c4, b) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1296
+jacobian (c4, s) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1304
+jacobian (c4, dt) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1312
+jacobian (c4, b1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1320
+jacobian (c4, c1) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1328
+jacobian (c4, c2) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1336
+jacobian (c4, c3) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1344
+jacobian (c4, c4) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 1352
+jacobian (noi, noi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_0, noi) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (implicit_equation_0, implicit_equation_0) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 1360
+collapsible (c4, c1)
+collapsible (c3, c4)
+noise "ib1e1_f" (b1, e1)
+noise "ib1e1" (b1, e1)
+noise "ib2e1" (b2, e1)
+noise "ib2e1_f" (b2, e1)
+noise "iavl" (b2, c2)
+noise "iztcb" (b2, c2)
+noise "isub" (b1, s)
+noise "xisub" (b, s)
+noise "rbv" (b1, b2)
+noise "re" (e, e1)
+noise "rbc" (b, b1)
+noise "xiex" (b, c3)
+noise "xiex_f" (b, c3)
+noise "rcc" (c, c3)
+noise "rcc" (c, c3)
+noise "rcbli" (c4, c1)
+noise "rcbli" (c4, c1)
+noise "ib3" (b1, c4)
+noise "ib3_f" (b1, c4)
+noise "iex" (b1, c4)
+noise "iex_f" (b1, c4)
+noise "rcblx" (c3, c4)
+noise "rcblx" (c3, c1)
+noise "rcc" (c, c4)
+noise "rcc" (c, c1)
+noise "in" (noi, gnd)
+0 states
+has bound_step false
+instance size 4264
+model size 960

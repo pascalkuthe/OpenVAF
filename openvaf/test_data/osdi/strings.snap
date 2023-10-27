@@ -1,0 +1,16 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "dummy1"
+units = "none", desc = "Dummy", flags = ParameterFlags(PARA_TY_STR | PARA_KIND_INST)
+param "dummy2"
+units = "none", desc = "Dummy", flags = ParameterFlags(PARA_TY_STR)
+
+2 terminals
+node "A" units = "V", runits = ""
+residual 64 4294967295 4294967295 4294967295
+node "C" units = "V", runits = ""
+residual 72 4294967295 4294967295 4294967295
+0 states
+has bound_step false
+instance size 80
+model size 32

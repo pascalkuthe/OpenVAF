@@ -1,0 +1,30 @@
+function %(v19, v20, v21, v32) {
+    inst0 = const fn %analysis(1) -> 1
+    v3 = fconst 0.0
+    v16 = sconst "<DUMMY>"
+
+                                block5:
+@0002                               v17 = call inst0(v16)
+@0002                               v18 = ibcast v17
+                                    br v18, block2, block4
+
+                                block2:
+@000a                               v22 = fmul v20, v21
+                                    jmp block4
+
+                                block4:
+                                    v28 = phi [v22, block2], [v3, block5]
+                                    v33 = phi [v20, block2], [v3, block5]
+                                    v31 = fneg v28
+                                    v34 = fneg v33
+                                    v38 = fmul v32, v28
+                                    v37 = optbarrier v38
+                                    v40 = fmul v32, v31
+                                    v39 = optbarrier v40
+                                    v42 = fmul v32, v33
+                                    v41 = optbarrier v42
+                                    v44 = fmul v32, v34
+                                    v43 = optbarrier v44
+                                    v45 = optbarrier v44
+                                    v47 = optbarrier v42
+}

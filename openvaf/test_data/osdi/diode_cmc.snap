@@ -1,0 +1,253 @@
+param "$mfactor"
+units = "", desc = "Multiplier (Verilog-A $mfactor)", flags = ParameterFlags(PARA_KIND_INST)
+param "LEVEL"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VERSION"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "SUBVERSION"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "REVISION"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TYPE"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "DTA"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "IMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TRJ"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CJORBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CJORSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CJORGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VBIRBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VBIRSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VBIRGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PHIGBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PHIGSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PHIGGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "IDSATRBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "IDSATRSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "IDSATRGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CSRHBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CSRHSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CSRHGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "XJUNSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "XJUNGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CTATBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CTATSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CTATGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "MEFFTATBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "MEFFTATSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "MEFFTATGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CBBTBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CBBTSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CBBTGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "FBBTRBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "FBBTRSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "FBBTRGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STFBBTBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STFBBTSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STFBBTGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VBRBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VBRSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VBRGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PBRBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PBRSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "PBRGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "FREV"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "RSBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "RSSTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "RSGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "RSCOM"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STRS"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "KF"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "AF"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STVBRBOT1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STVBRBOT2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STVBRSTI1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STVBRSTI2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STVBRGAT1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "STVBRGAT2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NFABOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NFASTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NFAGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ABMIN"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "ABMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "LSMIN"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "LSMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "LGMIN"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "LGMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TEMPMIN"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TEMPMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VFMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VRMAX"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "XTI", "PT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "SCALE"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "SHRINK"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "SWJUNEXP"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "VJUNREF"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "FJUNQ"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "CORECOVERY"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NJH"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NJDV"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NDIBOT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NDIGAT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NDISTI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "INJ1"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "INJ2"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "NQS"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TAU"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "WI"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "DEPNQS"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TNOM"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "TAUT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "INJT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "AB", "AREA"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "LS", "PERIM", "PJ"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "LG"
+units = "", desc = "", flags = ParameterFlags(0x0)
+param "MULT"
+units = "", desc = "", flags = ParameterFlags(0x0)
+
+2 terminals
+node "A" units = "V", runits = ""
+residual 1616 1624 4294967295 4294967295
+node "K" units = "V", runits = ""
+residual 1632 4294967295 4294967295 4294967295
+node "AIK" units = "V", runits = ""
+residual 1640 1648 4294967295 4294967295
+node "charge_A" units = "V", runits = ""
+residual 1656 1664 4294967295 4294967295
+node "charge_K" units = "V", runits = ""
+residual 1672 1680 4294967295 4294967295
+node "depl_A" units = "V", runits = ""
+residual 1688 1696 4294967295 4294967295
+jacobian (A, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 184
+jacobian (A, AIK) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 192
+jacobian (A, charge_A) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 200
+jacobian (A, charge_K) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 208
+jacobian (A, depl_A) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 216
+jacobian (K, K) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (K, AIK) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (AIK, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 224
+jacobian (AIK, K) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (AIK, AIK) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 232
+jacobian (AIK, charge_A) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 240
+jacobian (AIK, charge_K) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 248
+jacobian (AIK, depl_A) JacobianFlags(JACOBIAN_ENTRY_REACT | JACOBIAN_ENTRY_RESIST_CONST) react_ptr = 256
+jacobian (charge_A, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (charge_A, AIK) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (charge_A, charge_A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 264
+jacobian (charge_K, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (charge_K, AIK) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (charge_K, charge_K) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 272
+jacobian (depl_A, A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (depl_A, AIK) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT_CONST) react_ptr = 4294967295
+jacobian (depl_A, depl_A) JacobianFlags(JACOBIAN_ENTRY_RESIST | JACOBIAN_ENTRY_REACT) react_ptr = 280
+collapsible (AIK, K)
+collapsible (charge_A, gnd)
+collapsible (charge_K, gnd)
+collapsible (depl_A, gnd)
+noise "shot" (A, AIK)
+noise "flicker" (A, AIK)
+noise "thermal" (AIK, K)
+0 states
+has bound_step false
+instance size 1856
+model size 840

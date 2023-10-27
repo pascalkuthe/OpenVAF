@@ -430,11 +430,11 @@ fn merge_block() {
 
     expect![[r#"
         function %() {
-            v15 = iconst 3
-            v16 = iconst 4
+            v16 = iconst 3
+            v17 = iconst 4
         block0:
-            v17 = iadd v15, v16
-            v18 = isub v17, v16
+            v18 = iadd v16, v17
+            v19 = isub v18, v17
         }
     "#]]
     .assert_eq(&func.to_debug_string());
@@ -460,16 +460,16 @@ fn merge_block() {
 
     expect![[r#"
         function %() {
-            v15 = iconst 3
-            v16 = iconst 4
+            v16 = iconst 3
+            v17 = iconst 4
         block0:
-            v17 = iadd v15, v16
-            v18 = isub v17, v16
-            v19 = imul v18, v15
+            v18 = iadd v16, v17
+            v19 = isub v18, v17
+            v20 = imul v19, v16
             jmp block2
 
         block2:
-            v20 = imul v19, v19
+            v21 = imul v20, v20
         }
     "#]]
     .assert_eq(&func.to_debug_string());

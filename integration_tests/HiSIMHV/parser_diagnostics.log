@@ -1,13 +1,14 @@
 warning[L004]: macro '`Fn_SU_POW' was overwritten
-    ┌─ /HSMHV_macrosAndDefs.inc:432:1
-    │
-432 │ `define Fn_SU_POW( y , x , xmax , delta ) begin \
-    │ ----------------------------------------- '`Fn_SU_POW' was first defined here
-    │
-    ┌─ /HSMHV_eval_rdrift.inc:39:1
-    │
- 39 │ `define Fn_SU_POW( y , x , xmax , delta ) begin \
-    │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ '`Fn_SU_POW' is redefined here
-    │
+    --> /HSMHV_macrosAndDefs.inc:432:1
+    |
+432 | `define Fn_SU_POW( y , x , xmax , delta ) begin \
+    | ----------------------------------------- '`Fn_SU_POW' was first defined here
+    |
+    --> /HSMHV_eval_rdrift.inc:39:1
+    |
+ 39 | `define Fn_SU_POW( y , x , xmax , delta ) begin \
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ '`Fn_SU_POW' is redefined here
+    |
     = macro_overwritten is set to warn by default
+      use a CLI argument or an attribute to overwrite
 

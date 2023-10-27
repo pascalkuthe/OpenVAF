@@ -1,13 +1,12 @@
 use base_n::CASE_INSENSITIVE;
 use camino::{Utf8Path, Utf8PathBuf};
-use hir::{CompilationDB, Type};
-use hir_lower::{CallBackKind, ParamKind};
+use hir::{CompilationDB, ParamSysFun, Type};
+use hir_lower::{CallBackKind, HirInterner, ParamKind};
 use lasso::Rodeo;
 use llvm::{LLVMDisposeTargetData, OptLevel};
 use mir_llvm::{CodegenCx, LLVMBackend};
 use salsa::ParallelDatabase;
-use sim_back::{EvalMir, ModuleInfo};
-use stdx::iter::zip;
+use sim_back::{CompiledModule, ModuleInfo};
 use stdx::{impl_debug_display, impl_idx_from};
 use target::spec::Target;
 use typed_indexmap::TiSet;
@@ -27,6 +26,7 @@ mod model_data;
 
 mod eval;
 mod load;
+mod noise;
 mod setup;
 
 const OSDI_VERSION: (u32, u32) = (0, 3);
@@ -42,11 +42,11 @@ pub fn compile(
 ) -> Vec<Utf8PathBuf> {
     let mut literals = Rodeo::new();
     let mut lim_table = TiSet::default();
-    let mir: Vec<_> = modules
+    let modules: Vec<_> = modules
         .iter()
         .map(|module| {
-            let mir = EvalMir::new(db, module, &mut literals);
-            for cb in mir.eval_intern.callbacks.iter() {
+            let mir = CompiledModule::new(db, module, &mut literals);
+            for cb in mir.intern.callbacks.iter() {
                 if let CallBackKind::BuiltinLimit { name, num_args } = *cb {
                     lim_table.ensure(OsdiLimFunction { name, num_args: num_args - 2 });
                 }
@@ -69,9 +69,10 @@ pub fn compile(
         llvm::LLVMCreateTargetData(src.as_ptr())
     };
 
-    let modules: Vec<_> = zip(modules, &mir)
-        .map(|(module, mir)| {
-            let unit = OsdiModule::new(db, mir, module, &lim_table);
+    let modules: Vec<_> = modules
+        .iter()
+        .map(|module| {
+            let unit = OsdiModule::new(db, module, &lim_table);
             unit.intern_names(&mut literals, db);
             unit
         })
@@ -150,7 +151,7 @@ pub fn compile(
                 let tys = OsdiTys::new(&cx, target_data_);
                 let cguint = OsdiCompilationUnit::new(&_db, module, &cx, &tys, true);
 
-                // println!("{:?}", module.mir.eval_func);
+                // println!("{:?}", module.eval);
                 cguint.eval();
                 // println!("{}", llmod.to_str());
                 debug_assert!(llmod.verify_and_print());
@@ -234,13 +235,13 @@ pub fn compile(
 
 impl OsdiModule<'_> {
     fn intern_names(&self, literals: &mut Rodeo, db: &CompilationDB) {
-        literals.get_or_intern(&*self.base.module.name(db));
+        literals.get_or_intern(&*self.info.module.name(db));
         self.intern_node_strs(literals, db);
         literals.get_or_intern_static("Multiplier (Verilog-A $mfactor)");
         literals.get_or_intern_static("deg");
         literals.get_or_intern_static("m");
 
-        for param in self.base.params.values() {
+        for param in self.info.params.values() {
             for alias in &param.alias {
                 literals.get_or_intern(&**alias);
             }
@@ -251,35 +252,31 @@ impl OsdiModule<'_> {
             literals.get_or_intern(&param.group);
         }
 
-        for (var, opvar_info) in self.base.op_vars.iter() {
+        for (var, opvar_info) in self.info.op_vars.iter() {
             literals.get_or_intern(&*var.name(db));
             literals.get_or_intern(&opvar_info.unit);
             literals.get_or_intern(&opvar_info.description);
         }
 
-        for alias_list in self.base.sys_fun_alias.values() {
+        for alias_list in self.info.sys_fun_alias.values() {
             for alias in alias_list {
                 literals.get_or_intern(&**alias);
             }
         }
 
-        for param in self.mir.eval_intern.params.raw.keys() {
-            if let ParamKind::ParamSysFun(param) = param {
+        for param in ParamSysFun::iter() {
+            let is_live = |intern: &HirInterner, func| {
+                intern.is_param_live(func, &ParamKind::ParamSysFun(param))
+            };
+            if is_live(self.intern, self.eval)
+                || is_live(&self.init.intern, &self.init.func)
+                || is_live(self.model_param_intern, self.model_param_setup)
+            {
                 literals.get_or_intern(format!("${param:?}"));
             }
         }
     }
 }
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
-pub struct OsdiNodeId(u32);
-impl_idx_from!(OsdiNodeId(u32));
-impl_debug_display! {match OsdiNodeId{OsdiNodeId(id) => "res{id}";}}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-pub struct OsdiMatrixId(u32);
-impl_idx_from!(OsdiMatrixId(u32));
-impl_debug_display! {match OsdiMatrixId{OsdiMatrixId(id) => "matrix{id}";}}
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
 pub struct OsdiLimId(u32);
@@ -311,3 +308,8 @@ fn lltype<'ll>(ty: &Type, cx: &CodegenCx<'_, 'll>) -> &'ll llvm::Type {
         llty
     }
 }
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Hash)]
+pub struct Offset(u32);
+impl_idx_from!(Offset(u32));
+impl_debug_display! {match Offset{Offset(id) => "lim{id}";}}

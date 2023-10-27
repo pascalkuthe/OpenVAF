@@ -24,10 +24,10 @@
 mod dfg;
 mod dominators;
 mod entities;
-mod immediates;
 mod instructions;
 mod layout;
 mod serialize;
+mod validation;
 
 pub mod builder;
 pub mod cursor;
@@ -43,16 +43,19 @@ use typed_index_collections::TiVec;
 use typed_indexmap::TiSet;
 
 pub use crate::dfg::consts::*;
-pub use crate::dfg::{Const, DataFlowGraph, DfgValues, InstUseIter, UseCursor, UseIter, ValueDef};
+pub use crate::dfg::{
+    Const, DataFlowGraph, DfgValues, InstUseIter, Postorder, PostorderParts, UseCursor, UseIter,
+    ValueDef,
+};
 pub use crate::dominators::DominatorTree;
 pub use crate::entities::{AnyEntity, Block, FuncRef, Inst, Param, Use, Value};
 pub use crate::flowgraph::ControlFlowGraph;
-pub use crate::immediates::Ieee64;
 pub use crate::instructions::{
     InstructionData, InstructionFormat, Opcode, PhiMap, PhiNode, ValueList, ValueListPool,
 };
 pub use crate::layout::{InstCursor, InstIter, Layout};
 use crate::write::DummyResolver;
+pub use stdx::Ieee64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct FunctionSignature {
@@ -86,6 +89,18 @@ pub struct Function {
     /// Track the original source location for each instruction. The source locations are not
     /// interpreted, only preserved.
     pub srclocs: SourceLocs,
+}
+
+impl AsRef<Function> for Function {
+    fn as_ref(&self) -> &Function {
+        self
+    }
+}
+
+impl AsMut<Function> for Function {
+    fn as_mut(&mut self) -> &mut Function {
+        self
+    }
 }
 
 impl Function {
@@ -260,3 +275,15 @@ pub struct Unknown(pub u32);
 impl_idx_from!(Unknown(u32));
 
 impl_debug!(match Unknown{Unknown(raw) => "unknown{}",raw;});
+
+pub fn strip_optbarrier(func: impl AsRef<Function>, mut val: Value) -> Value {
+    let func = func.as_ref();
+    while let Some(inst) = func.dfg.value_def(val).inst() {
+        if let InstructionData::Unary { opcode: Opcode::OptBarrier, arg } = func.dfg.insts[inst] {
+            val = arg;
+        } else {
+            break;
+        }
+    }
+    val
+}

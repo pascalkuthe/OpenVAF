@@ -282,7 +282,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
                         self.func.layout.append_block(new_block);
                     };
                     let calculate_derivative_block = self.func.layout.make_block();
-                    self.func.layout.insert_block_after(calculate_derivative_block, new_block);
+                    self.func.layout.insert_block_after(calculate_derivative_block, old_block);
                     self.ins().br(is_base_zero, new_block, calculate_derivative_block);
 
                     // insert into the newly created block
