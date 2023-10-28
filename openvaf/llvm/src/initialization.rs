@@ -76,28 +76,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
 
         // Set the llvm "program name" to make usage and invalid argument messages more clear.
         add(concat!(env!("COMPILER_NAME"), " -Cllvm-args=\"...\" with"), true);
-        // if sess.time_llvm_passes() {
         add("-time-passes", false);
-        // }
-        // if sess.print_llvm_passes() {
-        //     add("-debug-pass=Structure", false);
-        // }
-        // if sess.target.generate_arange_section
-        //     && !sess.opts.debugging_opts.no_generate_arange_section
-        // {
-        //     add("-generate-arange-section", false);
-        // }
-
-        // Disable the machine outliner by default in LLVM versions 11 and LLVM
-        // version 12, where it leads to miscompilation.
-        //
-        // Ref:
-        // - https://github.com/rust-lang/rust/issues/85351
-        // - https://reviews.llvm.org/D103167
-        if crate::get_version() < (13, 0, 0) {
-            add("-enable-machine-outliner=never", false);
-        }
-
         for arg in args {
             add(arg, true);
         }
@@ -123,7 +102,7 @@ unsafe fn configure_llvm(cg_opts: &[String], tg_opts: &[String]) {
     LLVMParseCommandLineOptions(
         llvm_args.len() as c_int,
         llvm_args.as_ptr(),
-        b"".as_ptr() as *const i8,
+        b"".as_ptr() as *const c_char,
     );
 }
 
