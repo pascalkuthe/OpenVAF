@@ -24,6 +24,7 @@ use indexmap::IndexSet;
 use lasso::Spur;
 use mir::{strip_optbarrier, Function, Inst, Value, F_ZERO, TRUE};
 use mir_build::SSAVariableBuilder;
+use mir_opt::simplify_cfg_no_phi_merge;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiMap;
@@ -292,7 +293,7 @@ impl Topology {
             db: ctx.db,
             func: &mut ctx.func,
             output_values: &ctx.output_values,
-            cfg: &ctx.cfg,
+            cfg: &mut ctx.cfg,
             scratch_buf: BitSet::new_empty(num_insts),
             postorder: Vec::with_capacity(128),
             val_map: AHashMap::with_capacity(128),
@@ -304,6 +305,7 @@ impl Topology {
         let operators = builder.analog_operator_evaluations(&postdom_frontiers, &mut ctx.intern);
         drop(postdom_frontiers);
         builder.builid_analog_operators(operators, &mut ctx.intern);
+        simplify_cfg_no_phi_merge(builder.func, builder.cfg);
         builder.prune_small_signal();
         topology.contributes = AHashMap::new();
         topology

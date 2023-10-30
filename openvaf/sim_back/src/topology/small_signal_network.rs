@@ -1,3 +1,4 @@
+use std::iter::once;
 use std::mem::take;
 
 use hir::Node;
@@ -7,6 +8,7 @@ use mir::{Const, InstructionData, Opcode, Value, ValueDef, FALSE, F_ZERO};
 use crate::topology::Builder;
 use crate::util::{add, update_optbarrier};
 
+const RECUSE_DEPTH: u32 = 20;
 /// This is somewhat similar to the value lattices/flat sets used during
 /// constant propagation. By representing the set of possible constants
 /// that can be taken on by a value. The Elem variant is replaced by two
@@ -64,10 +66,10 @@ impl Builder<'_> {
                 }
                 let mut set = FlatSet::Zero;
                 for &val in &candidate.resist {
-                    set = set.min(self.analyze_value(val, 20));
+                    set = set.min(self.analyze_value(val, RECUSE_DEPTH));
                 }
                 for &val in &candidate.react {
-                    set = set.min(self.analyze_value(val, 20));
+                    set = set.min(self.analyze_value(val, RECUSE_DEPTH));
                 }
                 if set == FlatSet::Zero {
                     match candidate.kind {
@@ -113,7 +115,9 @@ impl Builder<'_> {
             }
             ValueDef::Const(_) if val == F_ZERO => return FlatSet::Zero,
             ValueDef::Const(_) => return FlatSet::Top,
-            ValueDef::Param(_) => return FlatSet::Bottom,
+            ValueDef::Param(_) => {
+                return FlatSet::Bottom;
+            }
             ValueDef::Invalid => unreachable!(),
         };
 
@@ -255,7 +259,7 @@ impl Builder<'_> {
         *scratch_buf = transversal.visited;
         let mut found_linear = false;
         for val in vals {
-            match self.analyze_dependency(20, val, unknown) {
+            match self.analyze_dependency(RECUSE_DEPTH, val, unknown) {
                 Dependency::NonLinear => return false,
                 Dependency::Linear if found_linear => return false,
                 Dependency::Linear => found_linear = true,
@@ -362,6 +366,17 @@ impl Builder<'_> {
             }
             valid.then_some(candidate)
         }));
+        let implice_eq = take(&mut self.topology.implicit_equations);
+        candidates.extend(implice_eq.iter().filter_map(|contrib| {
+            let unknown = contrib.unknown?;
+            let valid = self.has_linear_dependency(once(contrib.resist), unknown);
+            valid.then_some(Candidate {
+                kind: CandidateKind::Node { potential: unknown },
+                resist: vec![contrib.resist],
+                react: vec![contrib.react],
+            })
+        }));
+        self.topology.implicit_equations = implice_eq;
         candidates
     }
 

@@ -11,7 +11,7 @@ pub(super) struct Builder<'a> {
     pub(super) topology: &'a mut Topology,
     pub(super) db: &'a CompilationDB,
     pub(super) func: &'a mut Function,
-    pub(super) cfg: &'a ControlFlowGraph,
+    pub(super) cfg: &'a mut ControlFlowGraph,
     pub(super) output_values: &'a BitSet<Value>,
     pub(super) scratch_buf: BitSet<Inst>,
     pub(super) postorder: Vec<Inst>,
