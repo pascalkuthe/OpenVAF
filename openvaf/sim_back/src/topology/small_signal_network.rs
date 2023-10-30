@@ -4,7 +4,6 @@ use hir::Node;
 use indexmap::IndexMap;
 use mir::{Const, InstructionData, Opcode, Value, ValueDef, FALSE, F_ZERO};
 
-use super::ContributeKind;
 use crate::topology::Builder;
 use crate::util::{add, update_optbarrier};
 
@@ -282,36 +281,7 @@ impl Builder<'_> {
                 for contribute in contributes {
                     let dimension = self.val_map[&contribute];
                     let contribute = self.topology.as_contribution(contribute).unwrap();
-                    let reactive = match contribute {
-                        ContributeKind::Branch { is_voltage_src: true, is_reactive, .. } => {
-                            is_reactive
-                        }
-                        ContributeKind::Branch { id, is_reactive, .. } => {
-                            let branch = self.topology.get_branch(id);
-                            let is_small_signal_voltage = branch
-                                .voltage_src
-                                .unknown
-                                .map_or(true, |val| self.topology.small_signal_vals.contains(&val));
-                            let is_small_signal_current = branch
-                                .current_src
-                                .unknown
-                                .map_or(true, |val| self.topology.small_signal_vals.contains(&val));
-                            if is_small_signal_voltage && is_small_signal_current {
-                                continue;
-                            }
-                            is_reactive
-                        }
-                        ContributeKind::ImplicitEquation { equation, is_reactive } => {
-                            if let Some(unknown) =
-                                self.topology.implicit_equations[equation].unknown
-                            {
-                                if small_signal_vals.contains(&unknown) {
-                                    continue;
-                                }
-                            }
-                            is_reactive
-                        }
-                    };
+                    let reactive = contribute.is_reactive();
                     cov_mark::hit!(prune_small_signal);
                     let contribute = self.topology.get_mut(contribute);
                     let val = if reactive {

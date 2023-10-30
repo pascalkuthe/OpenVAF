@@ -33,8 +33,8 @@ Topology {
             unknown: Some(
                 v32,
             ),
-            resist: v39,
-            react: v36,
+            resist: v36,
+            react: v39,
             resist_small_signal: v3,
             react_small_signal: v3,
             noise: [],

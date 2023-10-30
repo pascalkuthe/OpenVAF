@@ -15,4 +15,6 @@ function %(v16, v18, v19, v22, v27) {
                                     v29 = optbarrier v16
                                     v30 = optbarrier v16
                                     v34 = optbarrier v33
+                                    v35 = optbarrier v27
+                                    v36 = optbarrier v32
 }

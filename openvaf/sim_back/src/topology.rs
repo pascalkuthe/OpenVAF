@@ -313,10 +313,6 @@ impl Topology {
         self.contributes.get(&val).copied()
     }
 
-    fn get_branch(&self, branch: BranchId) -> &BranchInfo {
-        &self.branches[branch]
-    }
-
     fn get_branch_mut(&mut self, branch: BranchId) -> &mut BranchInfo {
         &mut self.branches[branch]
     }

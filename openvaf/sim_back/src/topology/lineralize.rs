@@ -125,8 +125,8 @@ impl<'a> super::Builder<'a> {
                             ssa_builder.define_at_exit(self.func, F_ZERO, arg0, operator_inst);
                         Contribution {
                             unknown: Some(eq_val),
-                            resist: arg0,
-                            react: neg_eq_val,
+                            resist: neg_eq_val,
+                            react: arg0,
                             ..Contribution::default()
                         }
                     };
