@@ -117,7 +117,7 @@ impl AstIdMap {
         // Compared to rust analyzer the parent mapping was added here for lint attribute
         // resolution
         // TODO does this hurt caching in any way. Probably not:
-        // if the parent changes then something before changed aswell and the item is moved anyway)
+        // if the parent changes then something before changed as well and the item is moved anyway)
         bdfs(node, |it, parent| has_id_map_entry(it.kind()).then(|| res.alloc(it, parent)));
         res
     }

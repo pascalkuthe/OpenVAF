@@ -7,7 +7,7 @@ use indoc::indoc;
 use lasso::Rodeo;
 use stdx::{integration_test_dir, openvaf_test_data};
 
-use crate::context::{Context, OptimiziationStage};
+use crate::context::{Context, OptimizationStage};
 use crate::dae::DaeSystem;
 use crate::init::Initialization;
 use crate::topology::Topology;
@@ -19,13 +19,13 @@ fn run_test(src: &str) {
     let mut cx = Context::new(&db, &mut literals, &module);
     cx.compute_outputs(true);
     cx.compute_cfg();
-    cx.optimize(OptimiziationStage::Initial);
+    cx.optimize(OptimizationStage::Initial);
 
     let topology = Topology::new(&mut cx);
     let mut dae_system = DaeSystem::new(&mut cx, topology);
 
     cx.compute_cfg();
-    let gvn = cx.optimize(OptimiziationStage::PostDerivative);
+    let gvn = cx.optimize(OptimizationStage::PostDerivative);
     dae_system.sparsify(&mut cx);
 
     cx.refresh_op_dependent_insts();

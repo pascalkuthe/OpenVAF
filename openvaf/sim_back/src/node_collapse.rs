@@ -55,7 +55,7 @@ impl NodeCollapse {
                 });
                 if let Some(source_pair) = source_pair {
                     // careful, if we insert extra derivatives for currents then we need to
-                    // check that we are not overwritign that list here
+                    // check that we are not overwriting that list here
                     let pair = pairs.ensure((unknown, None)).0;
                     extra_pairs[source_pair].insert(pair, pairs.len());
                 }

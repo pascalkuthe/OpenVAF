@@ -49,7 +49,7 @@ pub fn add(cursor: &mut FuncCursor, dst: &mut Value, val: Value, negate: bool) {
     match (*dst, val) {
         (_, F_ZERO) => (),
         (F_ZERO, _) if negate => *dst = cursor.ins().fneg(val),
-        (F_ZERO, _) => *dst = val,
+//        (F_ZERO, _) => *dst = val, // why no cursor.ins()?
         (old, _) if negate => *dst = cursor.ins().fsub(old, val),
         (old, _) => *dst = cursor.ins().fadd(old, val),
     }

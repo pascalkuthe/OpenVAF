@@ -210,7 +210,7 @@ impl BlockLoc {
         tree.block_scope(self.ast)
             .name
             .clone()
-            .expect("BlockLocs are only cerated for named Blocks")
+            .expect("BlockLocs are only created for named Blocks")
     }
 }
 

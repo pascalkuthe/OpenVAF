@@ -123,7 +123,6 @@ impl<'ll> OsdiCompilationUnit<'_, '_, 'll> {
                                 hi
                             }
                         }
-                        // TODO support abstime
                         ParamKind::Current(CurrentKind::Port(_)) => cx.const_real(0.0),
                         ParamKind::Abstime => {
                             let loc = MemLoc::struct_gep(

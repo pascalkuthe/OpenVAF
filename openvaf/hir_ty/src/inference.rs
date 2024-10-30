@@ -598,7 +598,9 @@ impl Ctx<'_> {
             }
 
             BuiltIn::limit => {
-                infere_args = &args[0..2];
+                if args.len() >= 2 {
+                    infere_args = &args[0..2];
+                }
                 Cow::Borrowed(TiSlice::from_ref(info.signatures))
             }
 
@@ -787,11 +789,13 @@ impl Ctx<'_> {
             self.result.diagnostics.push(InferenceDiagnostic::ExpectedProbe { e: probe })
         }
 
-        if let Some(Ty::UserFunction(func)) = self.result.expr_types.get(args[1]).cloned() {
+        if args.len() == 1 {
+            // only one argument (no limit function specified)
+        } else if let Some(Ty::UserFunction(func)) = self.result.expr_types.get(args[1]).cloned() {
             debug_assert_eq!(sig, LIMIT_USER_FUNCTION);
             let fun_info = self.db.function_data(func);
 
-            // user-function needs two extra arguments but $limit also accepts two accepts that are
+            // user-function needs two extra arguments but $limit also accepts two arguments that are
             // not passed directly to the function so these must just be equal
             if fun_info.args.len() != args.len() {
                 self.result.diagnostics.push(InferenceDiagnostic::ArgCntMismatch {

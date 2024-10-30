@@ -41,7 +41,27 @@ impl Diagnostic for PreprocessorDiagnostic {
                     message: "macro not found here".to_owned(),
                 }])
             }
+            PreprocessorDiagnostic::MacroNotDefined { span, .. } => {
+                let span = span.to_file_span(&sm);
+
+                Report::warning().with_labels(vec![Label {
+                    style: LabelStyle::Primary,
+                    file_id: span.file,
+                    range: span.range.into(),
+                    message: "macro not defined here".to_owned(),
+                }])
+            }
             PreprocessorDiagnostic::MacroRecursion { .. } => todo!(),
+            PreprocessorDiagnostic::UnsupportedCompDir { span, .. } => {
+                let span = span.to_file_span(&sm);
+
+                Report::warning().with_labels(vec![Label {
+                    style: LabelStyle::Primary,
+                    file_id: span.file,
+                    range: span.range.into(),
+                    message: "directive ignored".to_owned(),
+                }])
+            }
             PreprocessorDiagnostic::FileNotFound { span, .. } => {
                 let labels = if let Some(span) = span {
                     let span = span.to_file_span(&sm);

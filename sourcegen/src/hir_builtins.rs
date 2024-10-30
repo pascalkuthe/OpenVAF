@@ -91,6 +91,7 @@ const BUILTINS: [&str; 25] = [
     "atan",
     "atan2",
     "atanh",
+    "ceil",
     "cos",
     "cosh",
     "exp",
@@ -295,7 +296,7 @@ fn generate_builtins() {
         }
 
 
-        pub fn insert_modulle_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>){
+        pub fn insert_module_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>){
             #(dst.insert(sysfun::#params,ParamSysFun::#params.into());)*
         }
     };

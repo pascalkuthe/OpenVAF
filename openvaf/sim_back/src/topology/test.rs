@@ -6,7 +6,7 @@ use lasso::Rodeo;
 use mir::Function;
 use stdx::openvaf_test_data;
 
-use crate::context::{Context, OptimiziationStage};
+use crate::context::{Context, OptimizationStage};
 use crate::topology::Topology;
 
 fn compile(src: &str) -> (Function, Topology, String) {
@@ -16,7 +16,7 @@ fn compile(src: &str) -> (Function, Topology, String) {
     let mut context = Context::new(&db, &mut literals, &module);
     context.compute_outputs(true);
     context.compute_cfg();
-    context.optimize(OptimiziationStage::Initial);
+    context.optimize(OptimizationStage::Initial);
     let topology = Topology::new(&mut context);
     assert!(context.func.validate());
     (context.func, topology, module.module.name(&db))

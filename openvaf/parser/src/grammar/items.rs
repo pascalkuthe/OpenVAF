@@ -121,7 +121,16 @@ fn constraint(p: &mut Parser) {
         m.abandon(p);
         return;
     }
-    range_or_expr(p);
+    if p.eat(T!["'{"]) || p.eat(T!['{']) {
+        // array range (for string parameters)
+        expr(p);
+        while p.eat(T![,]) {
+            expr(p);
+        }
+        p.expect(T!['}']);
+    } else {
+        range_or_expr(p);
+    }
     m.complete(p, CONSTRAINT);
 }
 

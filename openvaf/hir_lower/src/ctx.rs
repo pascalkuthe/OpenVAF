@@ -220,7 +220,7 @@ impl<'a, 'c> LoweringCtx<'a, 'c> {
         val
     }
 
-    pub fn implicit_eqation(&mut self, kind: ImplicitEquationKind) -> (ImplicitEquation, Value) {
+    pub fn implicit_equation(&mut self, kind: ImplicitEquationKind) -> (ImplicitEquation, Value) {
         let equation = self.intern.implicit_equations.push_and_get_key(kind);
         let place = self.dec_place(PlaceKind::CollapseImplicitEquation(equation));
         self.func.def_var(place, FALSE);

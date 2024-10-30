@@ -7,8 +7,8 @@ use vfs::FileId;
 
 use crate::{BaseDB, ErasedAstId};
 
-/// Lints can be set to different levls
-/// This enum represents these levls
+/// Lints can be set to different levels
+/// This enum represents these levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LintLevel {
     /// Lints set to allow will not be displayed

@@ -123,7 +123,7 @@ impl CallBackKind {
                 has_sideeffects: false,
             },
             CallBackKind::FlickerNoise { name, .. } => FunctionSignature {
-                name: format!("flickr_noise({name:?})"),
+                name: format!("flicker_noise({name:?})"),
                 params: 2,
                 returns: 1,
                 has_sideeffects: false,

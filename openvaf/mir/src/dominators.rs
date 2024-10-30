@@ -9,16 +9,6 @@ use bitset::SparseBitMatrix;
 use stdx::packed_option::PackedOption;
 use typed_index_collections::{TiSlice, TiVec};
 
-trait CfgREVERSE {
-    type Successors;
-    type Predecessors;
-
-    fn successors(cfg: &ControlFlowGraph, bb: Block) -> Self::Successors;
-    fn predecessors(cfg: &ControlFlowGraph, bb: Block) -> Self::Successors;
-}
-
-trait ToIter {}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DomTreeNode {
     /// Number of this node in a (reverse) post-order traversal of the CFG, starting from 1.

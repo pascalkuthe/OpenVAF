@@ -16,7 +16,7 @@ fn tracked_env_var_os<K: AsRef<OsStr> + Display>(key: K) -> Option<OsString> {
 
 fn main() {
     // If we're just running `check`, there's no need to actually compute the stdlib just
-    // popualte dummys
+    // populate dummies
     let no_gen = tracked_env_var_os("RUST_CHECK").is_some();
     let sh = Shell::new().unwrap();
     let osdi_dir = stdx::project_root().join("openvaf").join("osdi");

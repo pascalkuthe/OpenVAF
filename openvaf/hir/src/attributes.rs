@@ -21,7 +21,7 @@ impl AstCache {
     /// # Returns
     ///
     /// The (unescaped) string literal assigned to `attribute`. If `attribute`
-    /// doesn't exits or is not a string literal `None` is returned instead
+    /// doesn't exist or is not a string literal `None` is returned instead
     pub(crate) fn resolve_attribute(&self, attribute: &str, id: ErasedAstId) -> Option<ast::Attr> {
         let idx = self.id_map.get_attr(id, attribute)?;
         let ast = self.id_map.get_syntax(id).to_node(self.ast.syntax());

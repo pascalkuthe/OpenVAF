@@ -345,21 +345,6 @@ impl<'a> fmt::Display for DisplayValues<'a> {
     }
 }
 
-struct DisplayValuesWithDelimiter<'a>(&'a [Value], char);
-
-impl<'a> fmt::Display for DisplayValuesWithDelimiter<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for (i, val) in self.0.iter().enumerate() {
-            if i == 0 {
-                write!(f, "{}", val)?;
-            } else {
-                write!(f, "{}{}", self.1, val)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 /// A lasso resolver that always returns `"<DUMMY>"`.
 /// Mainly useful for debugging
 pub struct DummyResolver;

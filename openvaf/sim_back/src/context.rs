@@ -25,7 +25,7 @@ pub(crate) struct Context<'a> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum OptimiziationStage {
+pub enum OptimizationStage {
     Initial,
     PostDerivative,
     Final,
@@ -65,13 +65,13 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn optimize(&mut self, stage: OptimiziationStage) -> GVN {
-        if stage == OptimiziationStage::Initial {
+    pub fn optimize(&mut self, stage: OptimizationStage) -> GVN {
+        if stage == OptimizationStage::Initial {
             dead_code_elimination(&mut self.func, &self.output_values);
         }
         sparse_conditional_constant_propagation(&mut self.func, &self.cfg);
         inst_combine(&mut self.func);
-        if stage == OptimiziationStage::Final {
+        if stage == OptimizationStage::Final {
             simplify_cfg(&mut self.func, &mut self.cfg);
         } else {
             simplify_cfg_no_phi_merge(&mut self.func, &mut self.cfg);
@@ -83,7 +83,7 @@ impl<'a> Context<'a> {
         gvn.solve(&mut self.func);
         gvn.remove_unnecessary_insts(&mut self.func, &self.dom_tree);
 
-        if stage == OptimiziationStage::Final {
+        if stage == OptimizationStage::Final {
             let mut control_dep = SparseBitMatrix::new_square(0);
             self.dom_tree.compute_postdom_frontiers(&self.cfg, &mut control_dep);
             aggressive_dead_code_elimination(

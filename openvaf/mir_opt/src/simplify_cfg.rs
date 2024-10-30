@@ -1,8 +1,7 @@
-use std::hash::{Hash, Hasher};
 use std::iter::repeat;
 
 use bitset::BitSet;
-use mir::{Block, ControlFlowGraph, Function, InstructionData, Value, ValueDef, FALSE, TRUE};
+use mir::{Block, ControlFlowGraph, Function, InstructionData, ValueDef, FALSE, TRUE};
 
 #[cfg(test)]
 mod tests;
@@ -634,21 +633,3 @@ impl<'a> SimplifyCfg<'a> {
         }
     }
 }
-
-#[derive(Clone)]
-struct ResolvedPhi<I> {
-    vals: I,
-}
-impl<I: Iterator<Item = Value> + Clone> Hash for ResolvedPhi<I> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        for val in self.vals.clone() {
-            val.hash(state)
-        }
-    }
-}
-impl<I: Iterator<Item = Value> + Clone> PartialEq for ResolvedPhi<I> {
-    fn eq(&self, other: &Self) -> bool {
-        self.vals.clone().eq(other.vals.clone())
-    }
-}
-impl<I: Iterator<Item = Value> + Clone> Eq for ResolvedPhi<I> {}

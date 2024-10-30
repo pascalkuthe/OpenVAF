@@ -7,7 +7,7 @@ use stdx::impl_debug_display;
 
 pub use module_info::{collect_modules, ModuleInfo};
 
-use crate::context::{Context, OptimiziationStage};
+use crate::context::{Context, OptimizationStage};
 use crate::dae::DaeSystem;
 use crate::init::Initialization;
 use crate::node_collapse::NodeCollapse;
@@ -61,7 +61,7 @@ impl<'a> CompiledModule<'a> {
         let mut cx = Context::new(db, literals, module);
         cx.compute_outputs(true);
         cx.compute_cfg();
-        cx.optimize(OptimiziationStage::Initial);
+        cx.optimize(OptimizationStage::Initial);
         debug_assert!(cx.func.validate());
 
         let topology = Topology::new(&mut cx);
@@ -69,7 +69,7 @@ impl<'a> CompiledModule<'a> {
         let mut dae_system = DaeSystem::new(&mut cx, topology);
         debug_assert!(cx.func.validate());
         cx.compute_cfg();
-        let gvn = cx.optimize(OptimiziationStage::PostDerivative);
+        let gvn = cx.optimize(OptimizationStage::PostDerivative);
         dae_system.sparsify(&mut cx);
         debug_assert!(cx.func.validate());
 

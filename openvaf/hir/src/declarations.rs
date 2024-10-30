@@ -19,7 +19,7 @@ struct Scope {
 }
 impl Scope {
     fn new(def_map: Arc<DefMap>, scope: LocalScopeId, block: Option<(Name, ScopeDef)>) -> Scope {
-        // safety: def_map is a immultable/an arc that will live atleast as long as the scop
+        // safety: def_map is a immutable/an arc that will live at least as long as the scope
         let iter = unsafe { transmute(def_map[scope].declarations.iter()) };
         Scope { _def_map: def_map, iter, def: block }
     }

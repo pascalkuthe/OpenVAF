@@ -9,7 +9,7 @@ use hir::signatures::{
     NATURE_ACCESS_NODE_GND, NATURE_ACCESS_PORT_FLOW, REAL_EQ, REAL_OP, SIMPARAM_DEFAULT,
     SIMPARAM_NO_DEFAULT, STR_EQ,
 };
-use hir::{Body, BuiltIn, Expr, ExprId, Literal, ParamSysFun, Ref, ResolvedFun, Type};
+use hir::{Body, BuiltIn, Expr, ExprId, Literal, Ref, ResolvedFun, Type};
 use mir::builder::InstBuilder;
 use mir::{Opcode, Value, FALSE, F_ZERO, GRAVESTONE, INFINITY, TRUE, ZERO};
 use mir_build::RetBuilder;
@@ -564,8 +564,9 @@ impl BodyLoweringCtx<'_, '_, '_> {
                             CurrentKind::Port(self.body.into_port_flow(args[0]))
                         ))
                 };
-                let mfactor = self.ctx.use_param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
-                return self.ctx.ins().fdiv(res, mfactor);
+                //let mfactor = self.ctx.use_param(ParamKind::ParamSysFun(ParamSysFun::mfactor));
+                //return self.ctx.ins().fdiv(res, mfactor);
+                return res;
             }
             BuiltIn::potential => {
                 match_signature! {
@@ -663,12 +664,12 @@ impl BodyLoweringCtx<'_, '_, '_> {
             }
             BuiltIn::finish | BuiltIn::stop => GRAVESTONE,
 
-            /* TODO: absdealy
+            /* TODO: absdelay
             BuiltIn::absdelay => {
                 let arg = self.lower_expr(args[0]);
                 let mut delay = self.lower_expr(args[1]);
-                let (eq1, res) = self.ctx.implicit_eqation(ImplicitEquationKind::Absdelay);
-                let (eq2, intermediate) = self.ctx.implicit_eqation(ImplicitEquationKind::Absdelay);
+                let (eq1, res) = self.ctx.implicit_equation(ImplicitEquationKind::Absdelay);
+                let (eq2, intermediate) = self.ctx.implicit_equation(ImplicitEquationKind::Absdelay);
                 if signature == ABSDELAY_MAX {
                     let max_delay = self.lower_expr(args[2]);
                     let use_delay = self.ctx.ins().fle(delay, max_delay);
@@ -699,7 +700,7 @@ impl BodyLoweringCtx<'_, '_, '_> {
     }
 
     fn lower_integral(&mut self, kind: IdtKind, args: &[ExprId]) -> Value {
-        let (equation, val) = self.ctx.implicit_eqation(ImplicitEquationKind::Idt(kind));
+        let (equation, val) = self.ctx.implicit_equation(ImplicitEquationKind::Idt(kind));
 
         let mut enable_integral = self.ctx.use_param(ParamKind::EnableIntegration);
         let residual = if kind.has_ic() {

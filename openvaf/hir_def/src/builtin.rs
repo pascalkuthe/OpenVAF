@@ -247,6 +247,7 @@ pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>)
     dst.insert(kw::atan, BuiltIn::atan.into());
     dst.insert(kw::atan2, BuiltIn::atan2.into());
     dst.insert(kw::atanh, BuiltIn::atanh.into());
+    dst.insert(kw::ceil, BuiltIn::ceil.into());
     dst.insert(kw::cos, BuiltIn::cos.into());
     dst.insert(kw::cosh, BuiltIn::cosh.into());
     dst.insert(kw::exp, BuiltIn::exp.into());
@@ -370,7 +371,7 @@ pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>)
     dst.insert(kw::slew, BuiltIn::slew.into());
     dst.insert(kw::transition, BuiltIn::transition.into());
 }
-pub fn insert_modulle_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>) {
+pub fn insert_module_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>) {
     dst.insert(sysfun::mfactor, ParamSysFun::mfactor.into());
     dst.insert(sysfun::xposition, ParamSysFun::xposition.into());
     dst.insert(sysfun::yposition, ParamSysFun::yposition.into());
