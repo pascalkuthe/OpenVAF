@@ -2,14 +2,17 @@
 //! no longer exist -- the assumption is total size of paths we ever look at is
 //! not too big.
 
+use std::hash::BuildHasherDefault;
+
 use indexmap::IndexSet;
+use rustc_hash::FxHasher;
 
 use crate::{FileId, VfsPath};
 
 /// Structure to map between [`VfsPath`] and [`FileId`].
 #[derive(Default, Debug)]
 pub(crate) struct PathInterner {
-    map: IndexSet<VfsPath, ahash::RandomState>,
+    map: IndexSet<VfsPath, BuildHasherDefault<FxHasher>>,
 }
 
 impl PathInterner {

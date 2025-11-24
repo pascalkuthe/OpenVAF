@@ -292,18 +292,20 @@ fn generate_builtins() {
             }
         }
 
-        pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>){
+        pub fn insert_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, BuildHasherDefault<FxHasher>>){
             #(dst.insert(#kw_types::#kws,BuiltIn::#variants.into());)*
         }
 
 
-        pub fn insert_module_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, RandomState>){
+        pub fn insert_module_builtin_scope(dst: &mut IndexMap<Name, ScopeDefItem, BuildHasherDefault<FxHasher>>){
             #(dst.insert(sysfun::#params,ParamSysFun::#params.into());)*
         }
     };
 
-    let header = "use ahash::RandomState;
+    let header = "use std::hash::BuildHasherDefault;
+
         use indexmap::IndexMap;
+        use rustc_hash::FxHasher;
         use syntax::name::{kw, sysfun, Name};
 
         use crate::nameres::ScopeDefItem;

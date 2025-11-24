@@ -13,7 +13,7 @@ doctest = false
 
 paths = {path="../../lib/paths",version="0.0.0"}
 indexmap = "2.0"
-ahash = "0.8"
+rustc-hash = "2.0"
 encoding_rs = "0.8"
 chardetng = "0.1"
 

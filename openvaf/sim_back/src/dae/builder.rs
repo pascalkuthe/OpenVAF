@@ -1,7 +1,3 @@
-use std::mem::replace;
-use std::vec;
-
-use ahash::AHashMap;
 use bitset::BitSet;
 use hir::{BranchWrite, CompilationDB, Node, ParamSysFun};
 use hir_lower::{CurrentKind, HirInterner, ImplicitEquation, ParamKind};
@@ -13,6 +9,11 @@ use mir::{
     Value, FALSE, F_ONE, F_ZERO, TRUE,
 };
 use mir_autodiff::auto_diff;
+use rustc_hash::FxHasher;
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+use std::mem::replace;
+use std::vec;
 use typed_index_collections::TiVec;
 
 use crate::context::Context;
@@ -122,7 +123,7 @@ impl<'a> Builder<'a> {
 
     pub(super) fn with_small_signal_network(
         mut self,
-        small_signal_parameters: IndexSet<Value, ahash::RandomState>,
+        small_signal_parameters: IndexSet<Value, BuildHasherDefault<FxHasher>>,
     ) -> Self {
         self.system.small_signal_parameters = small_signal_parameters;
         self
@@ -219,7 +220,7 @@ impl<'a> Builder<'a> {
     fn build_lim_rhs(
         &mut self,
         derivative_info: &KnownDerivatives,
-        derivatives: AHashMap<(Value, Unknown), Value>,
+        derivatives: HashMap<(Value, Unknown), Value, BuildHasherDefault<FxHasher>>,
     ) {
         for residual in &mut self.system.residual {
             for (state, (unchanged, lim_vals)) in self.intern.lim_state.iter_enumerated() {
@@ -272,7 +273,7 @@ impl<'a> Builder<'a> {
         &mut self,
         sim_unknown_reads: &[(ParamKind, Value)],
         derivative_info: &KnownDerivatives,
-        derivatives: &AHashMap<(Value, Unknown), Value>,
+        derivatives: &HashMap<(Value, Unknown), Value, BuildHasherDefault<FxHasher>>,
     ) {
         self.system.jacobian =
             TiVec::with_capacity(self.system.unknowns.len() * self.system.unknowns.len());

@@ -1,3 +1,5 @@
+use std::hash::BuildHasherDefault;
+
 use ahash::AHashSet;
 use hir::diagnostics::{BaseDB, ConsoleSink, Diagnostic, FileId, Label, LabelStyle, Report};
 use hir::{
@@ -5,6 +7,7 @@ use hir::{
     ResolvedAliasParameter, ScopeDef, Variable,
 };
 use indexmap::IndexMap;
+use rustc_hash::FxHasher;
 use smol_str::SmolStr;
 use syntax::ast::{self, Expr};
 use syntax::sourcemap::FileSpan;
@@ -42,9 +45,9 @@ pub fn collect_modules(
 
 pub struct ModuleInfo {
     pub module: Module,
-    pub params: IndexMap<Parameter, ParamInfo, ahash::RandomState>,
-    pub sys_fun_alias: IndexMap<ParamSysFun, Vec<SmolStr>, ahash::RandomState>,
-    pub op_vars: IndexMap<Variable, OpVar, ahash::RandomState>,
+    pub params: IndexMap<Parameter, ParamInfo, BuildHasherDefault<FxHasher>>,
+    pub sys_fun_alias: IndexMap<ParamSysFun, Vec<SmolStr>, BuildHasherDefault<FxHasher>>,
+    pub op_vars: IndexMap<Variable, OpVar, BuildHasherDefault<FxHasher>>,
 }
 
 impl ModuleInfo {
@@ -55,10 +58,12 @@ impl ModuleInfo {
         sink: &mut ConsoleSink,
         all_vars_opvars: bool,
     ) -> ModuleInfo {
-        let mut params: IndexMap<Parameter, ParamInfo, ahash::RandomState> = IndexMap::default();
-        let mut sys_fun_alias: IndexMap<ParamSysFun, Vec<SmolStr>, ahash::RandomState> =
+        let mut params: IndexMap<Parameter, ParamInfo, BuildHasherDefault<FxHasher>> =
             IndexMap::default();
-        let mut op_vars = IndexMap::default();
+        let mut sys_fun_alias: IndexMap<ParamSysFun, Vec<SmolStr>, BuildHasherDefault<FxHasher>> =
+            IndexMap::default();
+        let mut op_vars: IndexMap<Variable, OpVar, BuildHasherDefault<FxHasher>> =
+            IndexMap::default();
 
         let ast = cu.ast(db);
 

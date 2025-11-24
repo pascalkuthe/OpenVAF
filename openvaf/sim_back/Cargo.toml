@@ -24,6 +24,7 @@ mir_opt = { version = "0.0.0", path = "../mir_opt" }
 
 typed-index-collections = "3.1"
 ahash = "0.8"
+rustc-hash = "2.0"
 lasso = {version = "0.7", features = ["ahash"]}
 
 indexmap = "2.0"

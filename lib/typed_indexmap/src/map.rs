@@ -1,11 +1,11 @@
 use std::fmt::Debug;
-use std::hash::Hash;
+use std::hash::{BuildHasherDefault, Hash};
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-use ahash::RandomState;
 use indexmap::{Equivalent, IndexMap};
+use rustc_hash::FxHasher;
 
 pub type Iter<'a, I, K, V> = iter::Map<
     iter::Enumerate<indexmap::map::Iter<'a, K, V>>,
@@ -15,7 +15,7 @@ pub type Iter<'a, I, K, V> = iter::Map<
 #[repr(transparent)]
 pub struct TiMap<I, K, V> {
     /// raw set property
-    pub raw: IndexMap<K, V, ahash::RandomState>,
+    pub raw: IndexMap<K, V, BuildHasherDefault<FxHasher>>,
     _marker: PhantomData<fn(I) -> I>,
 }
 
@@ -38,7 +38,10 @@ impl<I, K: Clone, V: Clone> Clone for TiMap<I, K, V> {
 
 impl<I, K, V> Default for TiMap<I, K, V> {
     fn default() -> Self {
-        Self { raw: IndexMap::default(), _marker: PhantomData }
+        Self {
+            raw: IndexMap::with_hasher(BuildHasherDefault::<FxHasher>::default()),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -75,7 +78,7 @@ impl<I, K, V> TiMap<I, K, V> {
 
     pub fn with_capacity(cap: usize) -> Self {
         Self {
-            raw: IndexMap::with_capacity_and_hasher(cap, RandomState::new()),
+            raw: IndexMap::with_capacity_and_hasher(cap, BuildHasherDefault::<FxHasher>::default()),
             _marker: PhantomData,
         }
     }
@@ -177,21 +180,24 @@ where
     }
 }
 
-impl<I, K, V> From<IndexMap<K, V, ahash::RandomState>> for TiMap<I, K, V> {
-    fn from(raw: IndexMap<K, V, ahash::RandomState>) -> Self {
+impl<I, K, V> From<IndexMap<K, V, BuildHasherDefault<FxHasher>>> for TiMap<I, K, V> {
+    fn from(raw: IndexMap<K, V, BuildHasherDefault<FxHasher>>) -> Self {
         TiMap { raw, _marker: PhantomData }
     }
 }
 
 impl<I, K: Hash + Eq, V> FromIterator<(K, V)> for TiMap<I, K, V> {
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-        Self { raw: iter.into_iter().collect(), _marker: PhantomData }
+        let mut map = IndexMap::with_hasher(BuildHasherDefault::<FxHasher>::default());
+        map.extend(iter);
+        Self { raw: map, _marker: PhantomData }
     }
 }
 
-impl<I, K, V> AsRef<TiMap<I, K, V>> for IndexMap<K, V, RandomState> {
+impl<I, K, V> AsRef<TiMap<I, K, V>> for IndexMap<K, V, BuildHasherDefault<FxHasher>> {
     fn as_ref(&self) -> &TiMap<I, K, V> {
-        let ptr = self as *const IndexMap<K, V, RandomState> as *const TiMap<I, K, V>;
+        let ptr =
+            self as *const IndexMap<K, V, BuildHasherDefault<FxHasher>> as *const TiMap<I, K, V>;
         // safety: this is save because of repr(transparent)
         unsafe { &*ptr }
     }

@@ -1,8 +1,9 @@
 use std::fmt::{self, Display, Write};
+use std::hash::BuildHasherDefault;
 
-use ahash::RandomState;
 use indexmap::{IndexMap, IndexSet};
 use lasso::Rodeo;
+use rustc_hash::FxHasher;
 
 use crate::{
     Block, Const, ControlFlowGraph, Function, Inst, InstructionData, Param, Value, ValueDef,
@@ -34,15 +35,15 @@ impl Function {
         mut param_name: impl FnMut(Param) -> (&'static str, String),
         outputs: impl Iterator<Item = (String, Value)>,
     ) -> String {
-        let mut inst_map = IndexSet::default();
-        let bb_map = cfg
+        let mut inst_map: IndexSet<Inst, BuildHasherDefault<FxHasher>> = IndexSet::default();
+        let bb_map: IndexSet<Block, BuildHasherDefault<FxHasher>> = cfg
             .reverse_postorder(self)
             .map(|bb| {
                 inst_map.extend(self.layout.block_insts(bb));
                 bb
             })
             .collect();
-        let mut val_map: IndexSet<Value, RandomState> = IndexSet::default();
+        let mut val_map: IndexSet<Value, BuildHasherDefault<FxHasher>> = IndexSet::default();
         for &inst in inst_map.iter() {
             if let InstructionData::PhiNode(phi) = &self.dfg.insts[inst] {
                 val_map.extend(self.dfg.phi_edges(phi).map(|(_, val)| val))
@@ -99,9 +100,9 @@ impl Function {
 struct Serializer<'a> {
     cfg: &'a ControlFlowGraph,
     func: &'a Function,
-    inst_map: &'a IndexSet<Inst, RandomState>,
-    bb_map: &'a IndexSet<Block, RandomState>,
-    val_map: &'a IndexSet<Value, RandomState>,
+    inst_map: &'a IndexSet<Inst, BuildHasherDefault<FxHasher>>,
+    bb_map: &'a IndexSet<Block, BuildHasherDefault<FxHasher>>,
+    val_map: &'a IndexSet<Value, BuildHasherDefault<FxHasher>>,
     inputs: &'a IndexMap<&'static str, Vec<(String, usize)>>,
     intern: &'a Rodeo,
     buf: String,

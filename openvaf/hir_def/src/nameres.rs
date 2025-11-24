@@ -1,3 +1,4 @@
+use std::hash::BuildHasherDefault;
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 
@@ -5,6 +6,7 @@ use arena::{Arena, Idx};
 use basedb::{AstIdMap, ErasedAstId, FileId};
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
+use rustc_hash::FxHasher;
 use stdx::{impl_display, impl_from, impl_from_typed};
 use syntax::name::{kw, Name};
 use syntax::{AstNode, Parse, SourceFile, TextRange};
@@ -271,18 +273,19 @@ impl_from_typed! {
     for ScopeOrigin
 }
 
-static BUILTIN_SCOPE: Lazy<IndexMap<Name, ScopeDefItem, ahash::RandomState>> = Lazy::new(|| {
-    let mut scope = IndexMap::default();
-    insert_builtin_scope(&mut scope);
-    scope
-});
+static BUILTIN_SCOPE: Lazy<IndexMap<Name, ScopeDefItem, BuildHasherDefault<FxHasher>>> =
+    Lazy::new(|| {
+        let mut scope = IndexMap::default();
+        insert_builtin_scope(&mut scope);
+        scope
+    });
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct Scope {
     pub origin: ScopeOrigin,
     parent: Option<LocalScopeId>,
-    pub children: IndexMap<Name, LocalScopeId, ahash::RandomState>,
-    pub declarations: IndexMap<Name, ScopeDefItem, ahash::RandomState>,
+    pub children: IndexMap<Name, LocalScopeId, BuildHasherDefault<FxHasher>>,
+    pub declarations: IndexMap<Name, ScopeDefItem, BuildHasherDefault<FxHasher>>,
 }
 
 impl DefMap {

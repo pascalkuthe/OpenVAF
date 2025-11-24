@@ -21,6 +21,7 @@ arena = { version = "0.0.0", path = "../../lib/arena" }
 indexmap = "2.0"
 typed-index-collections = "3.1"
 ahash = "0.8"
+rustc-hash = "2.0"
 
 [dev-dependencies]
 expect-test = "1.4"

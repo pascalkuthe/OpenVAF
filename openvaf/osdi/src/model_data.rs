@@ -1,11 +1,12 @@
 use core::ptr::NonNull;
+use std::hash::BuildHasherDefault;
 
-use ahash::RandomState;
 use hir::{CompilationDB, Parameter};
 use indexmap::IndexMap;
 use llvm_sys::core::{LLVMBuildLoad2, LLVMBuildStore, LLVMBuildStructGEP2};
 use llvm_sys::LLVMValue as Value;
 use mir_llvm::{CodegenCx, MemLoc, UNNAMED};
+use rustc_hash::FxHasher;
 
 use crate::compilation_unit::OsdiModule;
 use crate::inst_data::{OsdiInstanceData, OsdiInstanceParam};
@@ -15,7 +16,7 @@ const NUM_CONST_FIELDS: u32 = 1;
 
 pub struct OsdiModelData<'ll> {
     pub param_given: &'ll llvm_sys::LLVMType,
-    pub params: IndexMap<Parameter, &'ll llvm_sys::LLVMType, RandomState>,
+    pub params: IndexMap<Parameter, &'ll llvm_sys::LLVMType, BuildHasherDefault<FxHasher>>,
     pub ty: &'ll llvm_sys::LLVMType,
 }
 
@@ -27,18 +28,14 @@ impl<'ll> OsdiModelData<'ll> {
         inst_data: &OsdiInstanceData<'ll>,
     ) -> Self {
         let inst_params = &inst_data.params;
-        let params: IndexMap<_, _, _> = cgunit
-            .info
-            .params
-            .keys()
-            .filter_map(|param| {
-                if inst_params.contains_key(&OsdiInstanceParam::User(*param)) {
-                    None
-                } else {
-                    Some((*param, lltype(&param.ty(db), cx)))
-                }
-            })
-            .collect();
+        let mut params = IndexMap::with_hasher(BuildHasherDefault::<FxHasher>::default());
+        params.extend(cgunit.info.params.keys().filter_map(|param| {
+            if inst_params.contains_key(&OsdiInstanceParam::User(*param)) {
+                None
+            } else {
+                Some((*param, lltype(&param.ty(db), cx)))
+            }
+        }));
 
         let param_given = bitfield::arr_ty((inst_params.len() + params.len()) as u32, cx);
 

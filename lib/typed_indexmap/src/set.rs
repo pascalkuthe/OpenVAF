@@ -1,17 +1,18 @@
 use std::fmt::Debug;
-use std::hash::Hash;
+use std::hash::{BuildHasherDefault, Hash};
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::Index;
 
 use indexmap::{Equivalent, IndexSet};
+use rustc_hash::FxHasher;
 
 pub type Iter<'a, K, V> =
     iter::Map<iter::Enumerate<indexmap::set::Iter<'a, V>>, fn((usize, &'a V)) -> (K, &'a V)>;
 
 pub struct TiSet<K, V> {
     /// raw set property
-    pub raw: IndexSet<V, ahash::RandomState>,
+    pub raw: IndexSet<V, BuildHasherDefault<FxHasher>>,
     _marker: PhantomData<fn(K) -> K>,
 }
 
@@ -33,14 +34,17 @@ impl<K, V: Clone> Clone for TiSet<K, V> {
 
 impl<K, V> Default for TiSet<K, V> {
     fn default() -> Self {
-        Self { raw: IndexSet::default(), _marker: PhantomData }
+        Self {
+            raw: IndexSet::with_hasher(BuildHasherDefault::<FxHasher>::default()),
+            _marker: PhantomData,
+        }
     }
 }
 
 impl<K, V> TiSet<K, V> {
     pub fn with_capacity(cap: usize) -> TiSet<K, V> {
         TiSet {
-            raw: IndexSet::with_capacity_and_hasher(cap, ahash::RandomState::default()),
+            raw: IndexSet::with_capacity_and_hasher(cap, BuildHasherDefault::<FxHasher>::default()),
             _marker: PhantomData,
         }
     }
@@ -174,6 +178,8 @@ where
     V: Eq + Hash,
 {
     fn from_iter<T: IntoIterator<Item = V>>(iter: T) -> Self {
-        Self { raw: iter.into_iter().collect(), _marker: PhantomData }
+        let mut set = IndexSet::with_hasher(BuildHasherDefault::<FxHasher>::default());
+        set.extend(iter);
+        Self { raw: set, _marker: PhantomData }
     }
 }

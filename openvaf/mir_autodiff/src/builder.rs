@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 use std::ops::Range;
 
 use ahash::AHashMap;
@@ -8,6 +10,7 @@ use mir::{
     Block, Function, Inst, InstructionData, Opcode, SourceLoc, Unknown, Value, F_LOG10_E, F_ONE,
     F_TWO, F_ZERO,
 };
+use rustc_hash::FxHasher;
 use stdx::iter::zip;
 use stdx::packed_option::{PackedOption, ReservedValue};
 
@@ -22,8 +25,8 @@ pub fn build_derivatives(
     intern: &mut DerivativeIntern,
     live_derivatives: &LiveDerivatives,
     post_order: &[Block],
-) -> AHashMap<(Value, Unknown), Value> {
-    let derivative_values: AHashMap<(Value, Unknown), Value> =
+) -> HashMap<(Value, Unknown), Value, BuildHasherDefault<FxHasher>> {
+    let derivative_values: HashMap<(Value, Unknown), Value, BuildHasherDefault<FxHasher>> =
         intern.unknowns.iter_enumerated().map(|(unknown, &val)| ((val, unknown), F_ONE)).collect();
 
     let mut known_values = BitSet::new_empty(func.dfg.num_values());
@@ -56,7 +59,7 @@ pub(crate) struct DerivativeBuilder<'a, 'u> {
     live_derivatives: &'a LiveDerivatives,
     intern: &'a mut DerivativeIntern<'u>,
 
-    derivative_values: AHashMap<(Value, Unknown), Value>,
+    derivative_values: HashMap<(Value, Unknown), Value, BuildHasherDefault<FxHasher>>,
     known_values: BitSet<Value>,
     dst: (Inst, SourceLoc),
     new_block: Option<Block>,
@@ -448,7 +451,7 @@ impl<'a, 'u> DerivativeBuilder<'a, 'u> {
 
     fn derivative_of_(
         intern: &DerivativeIntern,
-        derivative_values: &AHashMap<(Value, Unknown), Value>,
+        derivative_values: &HashMap<(Value, Unknown), Value, BuildHasherDefault<FxHasher>>,
         mut val: Value,
         derivative: Derivative,
     ) -> Value {

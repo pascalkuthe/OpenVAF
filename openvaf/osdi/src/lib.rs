@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::hash::BuildHasherDefault;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
+
+use rustc_hash::FxHasher;
 
 use base_n::CASE_INSENSITIVE;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -114,8 +117,9 @@ pub fn compile<'a>(
 
     let main_file = dst.with_extension("o");
 
-    let unoptirs = Arc::new(Mutex::new(HashMap::new()));
-    let irs = Arc::new(Mutex::new(HashMap::new()));
+    let unoptirs =
+        Arc::new(Mutex::new(HashMap::with_hasher(BuildHasherDefault::<FxHasher>::default())));
+    let irs = Arc::new(Mutex::new(HashMap::with_hasher(BuildHasherDefault::<FxHasher>::default())));
 
     // Build natures, disciplines, and attributes vectors, intern strings in Rodeo
     let (natures_vec, disciplines_vec, attributes_vec) = nda_arrays(&*db, &mut literals);

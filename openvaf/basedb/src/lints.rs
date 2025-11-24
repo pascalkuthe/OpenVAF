@@ -1,7 +1,9 @@
 use std::fmt::{self, Display, Formatter};
+use std::hash::BuildHasherDefault;
 use std::sync::Arc;
 
 use indexmap::IndexMap;
+use rustc_hash::FxHasher;
 use stdx::{impl_debug_display, impl_idx_from};
 use vfs::FileId;
 
@@ -101,7 +103,7 @@ pub struct LintData {
 /// and `str (lint name) -> LintData`
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct LintRegistry {
-    lints: IndexMap<&'static str, LintData, ahash::RandomState>,
+    lints: IndexMap<&'static str, LintData, BuildHasherDefault<FxHasher>>,
 }
 
 impl LintRegistry {

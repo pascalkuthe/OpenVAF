@@ -1,7 +1,7 @@
 use core::ffi::c_uint;
 use core::ptr::NonNull;
+use std::hash::BuildHasherDefault;
 
-use ahash::RandomState;
 use hir::{CompilationDB, ParamSysFun, Parameter, Variable};
 use hir_lower::{HirInterner, LimitState, ParamKind, PlaceKind};
 use indexmap::IndexMap;
@@ -21,6 +21,7 @@ use llvm_sys::target::{LLVMOffsetOfElement, LLVMTargetDataRef};
 use llvm_sys::LLVMIntPredicate;
 use mir::{strip_optbarrier, Const, Function, Param, ValueDef, F_ZERO};
 use mir_llvm::{CodegenCx, MemLoc, UNNAMED};
+use rustc_hash::FxHasher;
 use sim_back::dae::{self, MatrixEntryId, SimUnknown};
 use sim_back::init::CacheSlot;
 use stdx::packed_option::PackedOption;
@@ -212,13 +213,13 @@ pub struct OsdiInstanceData<'ll> {
     pub collapsed: &'ll llvm_sys::LLVMType,
 
     // llvm types for dynamic instance data struct fields
-    pub params: IndexMap<OsdiInstanceParam, &'ll llvm_sys::LLVMType, RandomState>,
+    pub params: IndexMap<OsdiInstanceParam, &'ll llvm_sys::LLVMType, BuildHasherDefault<FxHasher>>,
     pub eval_outputs: TiMap<EvalOutputSlot, mir::Value, &'ll llvm_sys::LLVMType>,
     pub cache_slots: TiVec<CacheSlot, &'ll llvm_sys::LLVMType>,
 
     pub residual: TiVec<SimUnknown, Residual>,
     pub noise: Vec<NoiseSource>,
-    pub opvars: IndexMap<Variable, EvalOutput, RandomState>,
+    pub opvars: IndexMap<Variable, EvalOutput, BuildHasherDefault<FxHasher>>,
     pub jacobian: TiVec<MatrixEntryId, MatrixEntry>,
     pub bound_step: Option<EvalOutputSlot>,
 }
@@ -244,21 +245,17 @@ impl<'ll> OsdiInstanceData<'ll> {
         let user_inst_params = module.info.params.iter().filter_map(|(param, info)| {
             info.is_instance.then(|| (OsdiInstanceParam::User(*param), lltype(&param.ty(db), cx)))
         });
-        let params: IndexMap<_, _, _> =
-            builtin_inst_params.chain(alias_inst_params).chain(user_inst_params).collect();
+        let mut params = IndexMap::with_hasher(BuildHasherDefault::<FxHasher>::default());
+        params.extend(builtin_inst_params.chain(alias_inst_params).chain(user_inst_params));
 
         let mut eval_outputs = TiMap::default();
-        let opvars = module
-            .info
-            .op_vars
-            .keys()
-            .map(|var| {
-                let val = module.intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
-                let ty = lltype(&var.ty(db), cx);
-                let pos = EvalOutput::new(module, val, &mut eval_outputs, true, ty);
-                (*var, pos)
-            })
-            .collect();
+        let mut opvars = IndexMap::with_hasher(BuildHasherDefault::<FxHasher>::default());
+        opvars.extend(module.info.op_vars.keys().map(|var| {
+            let val = module.intern.outputs[&PlaceKind::Var(*var)].unwrap_unchecked();
+            let ty = lltype(&var.ty(db), cx);
+            let pos = EvalOutput::new(module, val, &mut eval_outputs, true, ty);
+            (*var, pos)
+        }));
         let residual = module
             .dae_system
             .residual

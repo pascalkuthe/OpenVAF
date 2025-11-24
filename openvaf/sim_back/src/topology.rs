@@ -17,6 +17,8 @@
 //!   generation of unnecessary derivatives.
 //!
 
+use std::hash::BuildHasherDefault;
+
 use ahash::AHashMap;
 use bitset::{BitSet, SparseBitMatrix};
 use hir_lower::{CallBackKind, HirInterner, ImplicitEquation, ParamKind, PlaceKind};
@@ -25,6 +27,7 @@ use lasso::Spur;
 use mir::{strip_optbarrier, Function, Inst, Value, F_ZERO, TRUE};
 use mir_build::SSAVariableBuilder;
 use mir_opt::simplify_cfg_no_phi_merge;
+use rustc_hash::FxHasher;
 use stdx::{impl_debug_display, impl_idx_from};
 use typed_index_collections::TiVec;
 use typed_indexmap::TiMap;
@@ -150,7 +153,7 @@ impl Noise {
 pub(crate) struct Topology {
     pub(crate) branches: TiMap<BranchId, BranchWrite, BranchInfo>,
     pub(crate) implicit_equations: TiVec<ImplicitEquation, Contribution>,
-    pub(crate) small_signal_vals: IndexSet<Value, ahash::RandomState>,
+    pub(crate) small_signal_vals: IndexSet<Value, BuildHasherDefault<FxHasher>>,
     contributes: AHashMap<Value, ContributeKind>,
 }
 
@@ -284,7 +287,7 @@ impl Topology {
             implicit_equations,
             small_signal_vals: IndexSet::with_capacity_and_hasher(
                 128,
-                ahash::RandomState::default(),
+                BuildHasherDefault::<FxHasher>::default(),
             ),
         };
         let num_insts = ctx.func.dfg.num_insts();

@@ -16,6 +16,7 @@ list_pool = {version = "0.0.0" , path = "../../lib/list_pool"}
 typed-index-collections = "3.1"
 lasso = {version = "0.7", features = ["ahash"]}
 ahash = "0.8"
+rustc-hash = "2.0"
 bitset = {version = "0.0.0", path = "../../lib/bitset" }
 typed_indexmap = { version = "0.0.0", path = "../../lib/typed_indexmap" }
 dot = "0.1.4"

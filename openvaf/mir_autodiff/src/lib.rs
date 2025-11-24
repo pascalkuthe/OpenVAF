@@ -4,12 +4,15 @@ mod live_derivatives;
 mod postorder;
 mod subgraph;
 
-use ahash::AHashMap;
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+
 pub use builder::build_derivatives;
 pub use live_derivatives::LiveDerivatives;
 use mir::{
     DataFlowGraph, DominatorTree, Function, Inst, InstructionData, KnownDerivatives, Opcode, Value,
 };
+use rustc_hash::FxHasher;
 
 use crate::intern::{Derivative, DerivativeIntern};
 
@@ -18,7 +21,7 @@ pub fn auto_diff(
     dom_tree: &DominatorTree,
     derivatives: &KnownDerivatives,
     extra_derivatives: &[(Value, mir::Unknown)],
-) -> AHashMap<(Value, mir::Unknown), Value> {
+) -> HashMap<(Value, mir::Unknown), Value, BuildHasherDefault<FxHasher>> {
     let func = func.as_mut();
     let mut intern = DerivativeIntern::new(derivatives);
     let live_derivative = LiveDerivatives::build(func, &mut intern, extra_derivatives, dom_tree);
